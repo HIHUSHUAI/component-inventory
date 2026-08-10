@@ -202,7 +202,7 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
     <div class="guide-actions">
       <button class="btn fsbtn" onclick="enableFS()" title="把数据保存到 HTML 同目录的 data/ 文件夹(需 Chrome/Edge,一次性授权选择目录)">启用文件存储</button>
       <button class="btn primary" onclick="seedDemo()">载入示例数据</button>
-      <button class="btn" onclick="openImport()">导入立创 CSV</button>
+      <button class="btn" onclick="openImport()">导入数据</button>
       <button class="btn accent" onclick="openBom()">BOM 核对缺料</button>
       <button class="icon-btn" onclick="hideGuide()" title="关闭引导">✕</button>
     </div>
@@ -235,7 +235,7 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
     <button class="btn accent" onclick="openBom()" title="粘贴 BOM 核对库存,自动标出缺料">BOM 匹配</button>
     <button class="btn" onclick="openStat()" title="分类分布 / 库存趋势统计">统计</button>
     <button class="btn primary" onclick="openEdit()" title="Ctrl+A">＋ 添加器件</button>
-    <button class="btn" onclick="openImport()">导入 CSV</button>
+    <button class="btn" onclick="openImport()">导入数据</button>
     <button class="btn" onclick="exportCSV()">导出 CSV</button>
     <button class="btn" onclick="undo()" title="回退最近一次修改(Ctrl+Z,仅当前会话)">↺ 撤销</button>
     <button class="btn" onclick="openModal('backMask')">备份恢复</button>
@@ -261,7 +261,7 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
     </table>
     <div class="empty" id="emptyBox" style="display:none">
       <div class="big">还没有元器件数据</div>
-      点击「示例数据」体验,或「导入 CSV」从立创商城批量导入;也可用「BOM 匹配」直接核对设计清单
+      点击「示例数据」体验,或「导入数据」导入立创订单/CSV/Excel;也可用「BOM 匹配」直接核对设计清单
     </div>
   </div>
 </div>
@@ -298,12 +298,12 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
 
 <div class="modal-mask" id="impMask">
   <div class="modal wide">
-    <h2><span>导入 CSV</span><button class="close" onclick="closeModal('impMask')">✕</button></h2>
+    <h2><span>导入数据</span><button class="close" onclick="closeModal('impMask')">✕</button></h2>
     <div id="impStep1">
       <div class="drop" id="drop">
-        <div style="font-size:15px;margin-bottom:6px">点击选择文件,或将 CSV 拖到这里</div>
-        <div style="font-size:12px">支持立创商城订单导出、立创 EDA BOM、Excel 另存的 CSV</div>
-        <input type="file" id="file" accept=".csv,text/csv,text/plain">
+        <div style="font-size:15px;margin-bottom:6px">点击选择文件,或将文件拖到这里</div>
+        <div style="font-size:12px">支持 CSV / XLS / XLSX(Excel 自动解析)· 立创商城订单导出、立创 EDA BOM 均可导入</div>
+        <input type="file" id="file" accept=".csv,.xls,.xlsx,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
       </div>
       <div class="form-actions left" style="margin-top:12px">
         <button class="btn" onclick="dlTemplate()" title="下载带示例行的标准模板">下载 CSV 模板</button>
@@ -313,7 +313,7 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
       <div class="form-actions left" style="margin-top:8px">
         <button class="btn" onclick="parsePaste()">解析粘贴内容</button>
       </div>
-      <div class="note">提示:立创商城「订单详情 → 导出」或「立创 EDA → BOM 表导出 CSV」均可直接导入;若 CSV 含「单价/金额」列会自动识别为单价,单价为空的可点「立创查价」对照立创商城最小起订价填写。若用 Excel 导出,请选「CSV UTF-8」编码。导入前会自动备份,可随时撤销。</div>
+      <div class="note">提示:立创商城「订单详情 → 导出」的 XLS 或「立创 EDA → BOM 表导出」的 CSV/Excel 均可直接导入;应用会自动识别立创订单格式并预匹配列(商品编号→LCSC、厂家型号→型号、订购数量→数量、商品单价→单价),其他 CSV/Excel 走通用识别。Excel 首次解析需联网加载解析库(之后有缓存)。导入前会自动备份,可随时撤销。</div>
     </div>
     <div id="impStep2" style="display:none">
       <div class="seg">
@@ -321,7 +321,7 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
         <label><input type="radio" name="mode" value="merge" checked> 合并(同型号同封装自动累加数量)</label>
         <label><input type="radio" name="mode" value="append"> 追加(全部新增)</label>
       </div>
-      <div style="font-size:13px;color:var(--muted)">已读取 <b id="impRows" style="color:var(--text)">0</b> 行数据。请确认每一列对应的字段:</div>
+      <div style="font-size:13px;color:var(--muted)"><span id="impFmt" style="color:var(--accent);font-weight:500"></span> · 已读取 <b id="impRows" style="color:var(--text)">0</b> 行数据。请确认每一列对应的字段:</div>
       <table class="map-table" id="mapTable"></table>
       <div class="preview"><table id="impPrev"></table></div>
       <div class="form-actions">
@@ -336,9 +336,9 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
   <div class="modal wide">
     <h2><span>BOM 智能匹配</span><button class="close" onclick="closeModal('bomMask')">✕</button></h2>
     <div class="drop" id="bomDrop">
-      <div style="font-size:14px;margin-bottom:4px">点击或拖入立创 EDA 导出的 BOM CSV</div>
+      <div style="font-size:14px;margin-bottom:4px">点击或拖入立创 EDA 导出的 BOM(CSV / XLS / XLSX)</div>
       <div style="font-size:12px">标准 9 列格式:Comment / Footprint / Value / Category / Description / Supplier Part / Manufacturer Part…</div>
-      <input type="file" id="bomFile" accept=".csv,text/csv,text/plain">
+      <input type="file" id="bomFile" accept=".csv,.xls,.xlsx,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
     </div>
     <textarea id="bomText" class="paste" placeholder="或直接粘贴 BOM CSV 文本(含表头),点「解析并匹配」…"></textarea>
     <div class="form-actions left" style="margin-top:10px">
@@ -965,7 +965,41 @@ function batchPriceSave(){
   toast(`已更新 ${n} 项单价(可撤销)`,"ok");
 }
 
-/* ---------- CSV import ---------- */
+/* ---------- CSV / Excel 导入(总入口:自动识别格式) ---------- */
+const TPL_PRESETS={
+  lcscOrder:{
+    name:"立创商城订单详情",
+    cols:[["商品编号","lcsc"],["厂家型号","mpn"],["封装","pkg"],["商品名称","val"],["订购数量","qty"],["商品单价","price"],["序号",""]]
+  }
+};
+const HEADER_KEYS=["商品编号","厂家型号","订购数量","商品单价","封装","数量","单价","型号","名称","序号","类目","comment","footprint","quantity","supplier part","manufacturer part","designator","value"];
+function locateHeader(rows){
+  for(let i=0;i<Math.min(rows.length,40);i++){
+    let hits=0;
+    rows[i].forEach(c=>{const t=String(c).toLowerCase().replace(/\s+/g,"");if(HEADER_KEYS.some(k=>t.includes(k)))hits++});
+    if(hits>=3)return i;
+  }
+  return 0;
+}
+function detectTemplate(head){
+  const h=head.map(x=>String(x).toLowerCase().replace(/\s+/g,""));
+  const has=k=>h.some(x=>x.includes(k));
+  if(has("商品编号")&&(has("厂家型号")||has("订购数量")))return"lcscOrder";
+  return null;
+}
+function applyTemplate(head,tpl){
+  const preset=TPL_PRESETS[tpl];if(!preset)return;
+  mapping.forEach((m,i)=>{
+    const hi=String(head[i]||"").toLowerCase().replace(/\s+/g,"");
+    for(const col of preset.cols){
+      if(hi.includes(col[0])){m.field=col[1];break}
+    }
+  });
+}
+function cleanNum(v){
+  const n=parseFloat(String(v==null?"":v).replace(/[^\d.\-]/g,""));
+  return isFinite(n)?n:0;
+}
 function parseCSV(text){
   let sep=",";
   const nl=text.indexOf("\n");
@@ -1003,12 +1037,16 @@ function openImport(){openModal("impMask");$("impStep1").style.display="block";$
 function resetImport(){rawRows=[];mapping=[];$("file").value="";$("pasteArea").value="";$("impStep1").style.display="block";$("impStep2").style.display="none"}
 function backImport(){$("impStep1").style.display="block";$("impStep2").style.display="none"}
 function handleRows(rows){
-  if(rows.length<2){toast("未识别到数据行,请确认 CSV 格式");return}
-  const head=rows[0];
+  if(rows.length<2){toast("未识别到数据行,请确认文件格式");return}
+  const hi=locateHeader(rows);
+  const head=rows[hi];
   mapping=head.map(h=>({header:h,field:guessField(h)}));
-  enhanceMapping(head,rows.slice(1));
-  rawRows=rows.slice(1).filter(r=>r.some(c=>String(c).trim()!==""));
+  const tpl=detectTemplate(head);
+  if(tpl)applyTemplate(head,tpl);
+  enhanceMapping(head,rows.slice(hi+1));
+  rawRows=rows.slice(hi+1).filter(r=>r.some(c=>String(c).trim()!==""));
   $("impRows").textContent=rawRows.length;
+  $("impFmt").textContent="已识别格式:"+(tpl?TPL_PRESETS[tpl].name:"通用")+(hi>0?"(已自动定位表头行)":"");
   renderMap();renderPrev();
   $("impStep1").style.display="none";
   $("impStep2").style.display="block";
@@ -1019,7 +1057,40 @@ drop.ondragover=e=>{e.preventDefault();drop.classList.add("over")};
 drop.ondragleave=()=>drop.classList.remove("over");
 drop.ondrop=e=>{e.preventDefault();drop.classList.remove("over");if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0])};
 file.onchange=()=>{if(file.files[0])handleFile(file.files[0])};
+function isExcelFile(f){return /\.(xls|xlsx)$/i.test((f&&f.name)||"")}
+function loadXlsxLib(){
+  if(window.XLSX)return Promise.resolve();
+  const urls=["https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js","https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"];
+  return new Promise((res,rej)=>{
+    let i=0;
+    const tryLoad=()=>{
+      if(i>=urls.length){rej(new Error("load failed"));return}
+      const s=document.createElement("script");
+      s.src=urls[i++];
+      s.onload=res;
+      s.onerror=()=>{s.remove();tryLoad()};
+      document.head.appendChild(s);
+    };
+    tryLoad();
+  });
+}
+function readExcel(f,cb){
+  const r=new FileReader();
+  r.onload=async()=>{
+    try{
+      await loadXlsxLib();
+      const wb=XLSX.read(new Uint8Array(r.result),{type:"array"});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      cb(XLSX.utils.sheet_to_json(ws,{header:1,defval:""}));
+    }catch(e){
+      toast(/load failed/.test(e.message||"")?"加载 Excel 解析库失败(需联网一次),请将文件另存为 CSV 后导入":"Excel 解析失败,请确认文件未损坏","err");
+    }
+  };
+  r.onerror=()=>toast("文件读取失败","err");
+  r.readAsArrayBuffer(f);
+}
 function handleFile(f){
+  if(isExcelFile(f)){readExcel(f,rows=>handleRows(rows));return}
   const r=new FileReader();
   r.onload=()=>handleRows(parseCSV(r.result));
   r.onerror=()=>toast("文件读取失败");
@@ -1059,9 +1130,9 @@ function doImport(){
     if(!mpn){skipped++;return}
     const item={
       mpn,category:normCategory(get(row,"category"))||"其他",pkg:normPkg(get(row,"pkg")),val:get(row,"val"),
-      loc:get(row,"loc"),qty:Math.max(0,Math.round(num(get(row,"qty"),1))),
+      loc:get(row,"loc"),      qty:Math.max(0,Math.round(cleanNum(get(row,"qty")))),
       th:Math.max(0,Math.round(num(get(row,"th"),10))),lcsc:normLcsc(get(row,"lcsc")),
-      price:Math.max(0,num(get(row,"price"),0)),note:get(row,"note"),updated:now()
+      price:Math.max(0,cleanNum(get(row,"price"))),note:get(row,"note"),updated:now()
     };
     if(mode==="merge"){
       const hit=items.find(x=>x.mpn.toLowerCase()===mpn.toLowerCase()&&(x.pkg||"")===(item.pkg||""));
@@ -1111,12 +1182,13 @@ function bomCols(head){
   return map;
 }
 function parseBomRows(rows){
-  const head=rows[0],cols=bomCols(head);
+  const hi=locateHeader(rows);
+  const head=rows[hi],cols=bomCols(head);
   const out=[];
-  rows.slice(1).forEach(r=>{
+  rows.slice(hi+1).forEach(r=>{
     if(!r.some(c=>String(c).trim()!==""))return;
     const get=k=>cols[k]!==undefined?(r[cols[k]]||"").trim():"";
-    const qty=Math.max(0,Math.round(num(get("qty"),1)));
+    const qty=Math.max(0,Math.round(cleanNum(get("qty"))));
     if(!get("comment")&&!get("mpn")&&!get("lcsc"))return;
     out.push({designator:get("designator"),comment:get("comment"),footprint:normPkg(get("footprint")),qty,
       value:get("value")||get("comment"),category:normCategory(get("category")),desc:get("desc"),lcsc:normLcsc(get("lcsc")),mpn:get("mpn")});
@@ -1159,16 +1231,14 @@ function matchBom(b){
 }
 function parseBom(){
   const text=$("bomText").value.trim();
-  let rows=null;
-  if(text)rows=parseCSV(text);
-  else if($("bomFile").files[0]){
-    const f=$("bomFile").files[0];
-    const r=new FileReader();
-    r.onload=()=>{runBom(parseCSV(r.result))};
-    r.onerror=()=>toast("文件读取失败");
-    r.readAsText(f,"UTF-8");return;
-  }else{toast("请先粘贴 BOM 或选择文件");return}
-  runBom(rows);
+  if(text){runBom(parseCSV(text));return}
+  const f=$("bomFile").files[0];
+  if(!f){toast("请先粘贴 BOM 或选择文件");return}
+  if(isExcelFile(f)){readExcel(f,rows=>runBom(rows));return}
+  const r=new FileReader();
+  r.onload=()=>{runBom(parseCSV(r.result))};
+  r.onerror=()=>toast("文件读取失败");
+  r.readAsText(f,"UTF-8");
 }
 function runBom(rows){
   if(rows.length<2){toast("未识别到 BOM 数据行");return}
