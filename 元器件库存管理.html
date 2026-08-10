@@ -272,8 +272,9 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
     <form id="editForm" onsubmit="saveItem(event)">
       <div class="form-grid">
         <div class="fg full"><label>型号 / 名称 <em>*</em></label><input id="eMpn" required oninput="this.classList.remove('err')" placeholder="如:AMS1117-3.3 或 10K 贴片电阻"></div>
-        <div class="fg"><label>类别</label><select id="eCat" onchange="onCatChange()"></select></div>
+        <div class="fg"><label>类别</label><input id="eCat" list="catList" onchange="onCatChange();this.classList.add('user-cat')" placeholder="选择或输入新类别…"></div>
         <div class="fg"><label>封装</label><input id="ePkg" list="pkgList" placeholder="如 0603 / SOP-8"></div>
+        <datalist id="catList"></datalist>
         <datalist id="pkgList"></datalist>
         <div class="fg"><label id="lVal">参数值</label><input id="eVal" placeholder="如 10kΩ ±1%"></div>
         <div class="fg" id="fSub1" style="display:none"><label id="lSub1">子参数 1</label><input id="eSub1"></div>
@@ -288,6 +289,7 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
       </div>
       <div class="form-actions">
         <button type="button" class="btn" onclick="fillPriceFromLcsc()" title="打开立创商城并对照最小起订价填入单价">立创查价</button>
+        <button type="button" class="btn" onclick="matchLcscProduct()" title="粘贴立创商城商品链接或自动识别剪贴板,提取 LCSC 编号等信息自动填入">匹配编号</button>
         <span style="flex:1"></span>
         <button type="button" class="btn" onclick="closeModal('editMask')">取消</button>
         <button type="submit" class="btn primary">保存</button>
@@ -686,8 +688,7 @@ function renderStats(){
   items.forEach(i=>{cats.add(i.category||"其他");if(i.pkg)pkgs.add(i.pkg)});
   fillSelect($("fCat"),[...cats].sort(),"全部类别");
   fillSelect($("fPkg"),[...pkgs].sort(),"全部封装");
-  $("eCat").innerHTML='<option value="">选择类别…</option>'+allCats().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("");
-  autoSizeSelect($("eCat"));
+  $("catList").innerHTML=allCats().map(c=>`<option value="${esc(c)}">`).join("");
   const dl2=$("pkgList");
   dl2.innerHTML=[...pkgs].map(p=>`<option value="${esc(p)}">`).join("");
 }
@@ -935,6 +936,39 @@ function fillPriceFromLcsc(){
   if(n<0){toast("单价格式不正确","warn");return}
   $("ePrice").value=n;
   toast("已填入单价 ¥"+n+"(保存后生效)","ok");
+}
+async function matchLcscProduct(){
+  let clip="";
+  try{clip=await navigator.clipboard.readText();}catch(e){}
+  const input=prompt("粘贴立创商城商品链接(已自动识别剪贴板内容)\n\n支持格式:\n  · 搜索页 so.szlcsc.com/global.html?k=C14663\n  · 详情页 item.szlcsc.com/15331.html\n\n点击确定后提取编号并自动填入",clip||"");
+  if(!input)return;
+  const s=input.trim();
+  const mC=s.match(/global\.html\?k=([A-Za-z]?\d{3,})/);
+  const mPid=s.match(/item\.szlcsc\.com\/(\d{4,})\.html/);
+  let lcscNum=null, productId=null;
+  if(mC){
+    lcscNum=mC[1].toUpperCase();
+    if(!/^C\d/.test(lcscNum))lcscNum="C"+lcscNum;
+  }else if(mPid){
+    productId=mPid[1];
+  }else{
+    const mId=s.match(/(\d{4,})/);
+    if(mId)productId=mId[1];
+  }
+  if(lcscNum){
+    $("eLcsc").value=lcscNum;
+    toast("已自动填入 LCSC 编号:"+lcscNum+(productId?" + 详情 ID:"+productId:"")+"\n请继续填写型号/封装等字段,可用「立创查价」获取最小起订价","ok");
+    if(productId){
+      try{window.open("https://item.szlcsc.com/"+productId+".html","_blank","noopener")}catch(e){}
+    }else{
+      try{window.open("https://so.szlcsc.com/global.html?k="+encodeURIComponent(lcscNum),"_blank","noopener")}catch(e){}
+    }
+  }else if(productId){
+    try{window.open("https://item.szlcsc.com/"+productId+".html","_blank","noopener")}catch(e){}
+    toast("已在浏览器打开立创商品详情(ID:"+productId+")\n请对照填写型号/LCSC编号/封装/描述等字段,可用「立创查价」获取最小起订价","warn");
+  }else{
+    toast("未能识别 LCSC 编号或商品 ID,请检查链接格式\n(如 so.szlcsc.com/global.html?k=C14663 或 item.szlcsc.com/15331.html)","err");
+  }
 }
 function openBatchPrice(){
   if(!selSet.size){toast("请先勾选要查价的器件","warn");return}
