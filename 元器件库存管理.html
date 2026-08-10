@@ -1,0 +1,1508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>元器件库存管理</title>
+<style>
+:root{
+  --bg:#0d1117; --panel:#161b22; --panel2:#1c2128; --border:#30363d; --border2:#444c56;
+  --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --accent2:#1f6feb;
+  --green:#3fb950; --red:#f85149; --amber:#d29922; --purple:#bc8cff; --pink:#c9476f;
+}
+body.light{--bg:#f6f8fa;--panel:#ffffff;--panel2:#eef1f4;--border:#d8dee4;--border2:#b0b8c4;--text:#1f2328;--muted:#59636e;--accent:#0969da;--accent2:#0969da;--green:#1a7f37;--red:#cf222e;--amber:#9a6700;--purple:#8250df;--pink:#b23a68}
+body.light tbody tr:hover{background:rgba(9,105,218,.05)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.5}
+.wrap{max-width:1200px;margin:0 auto;padding:20px 16px 60px}
+header{display:flex;align-items:center;gap:12px;padding:8px 0 16px;border-bottom:1px solid var(--border);margin-bottom:16px}
+.logo{width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,#1f6feb,#58a6ff);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.logo svg{width:20px;height:20px}
+header h1{font-size:18px;font-weight:600}
+header .sub{color:var(--muted);font-size:12px;margin-top:2px}
+.save-state{margin-left:auto;color:var(--muted);font-size:12px;display:flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+.stat{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.stat .k{color:var(--muted);font-size:12px}
+.stat .v{font-size:24px;font-weight:600;margin-top:4px}
+.stat .v.red{color:var(--red)}
+.stat .v.green{color:var(--green)}
+.stat .v.accent{color:var(--accent)}
+.stat .v.amber{color:var(--amber)}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:8px}
+.search{flex:1;min-width:240px;position:relative}
+.search input{width:100%;background:var(--panel);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:9px 64px 9px 34px;font-size:14px;outline:none}
+.search input:focus{border-color:var(--accent)}
+.search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:15px;height:15px;stroke:var(--muted)}
+.mode-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:var(--panel2);border:1px solid var(--border2);border-radius:7px;color:var(--muted);font-size:11px;padding:3px 9px;cursor:pointer}
+.mode-btn:hover{border-color:var(--accent);color:var(--accent)}
+.mode-btn.on{background:var(--accent2);border-color:var(--accent2);color:#fff}
+select,.btn{background:var(--panel);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:9px 12px;font-size:13px;outline:none;cursor:pointer}
+select{min-width:104px}
+.map-table select{min-width:150px}
+.fg select{min-width:128px}
+select:hover{border-color:var(--border2)}
+.btn{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:500}
+.btn.primary:hover{background:#2f81f7;color:#fff}
+.btn.accent{border-color:var(--purple);color:var(--purple)}
+.btn.accent:hover{background:rgba(188,140,255,.12)}
+.btn.warn:hover{border-color:var(--amber);color:var(--amber)}
+.chk{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;cursor:pointer;user-select:none;white-space:nowrap}
+.chk input{accent-color:var(--accent)}
+.res-note{color:var(--muted);font-size:12px;margin:0 2px 10px}
+.res-note b{color:var(--accent)}
+.table-wrap{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:auto;max-height:calc(100vh - 300px)}
+table{width:100%;border-collapse:collapse;min-width:720px}
+thead th{position:sticky;top:0;background:var(--panel2);color:var(--muted);font-size:12px;font-weight:500;text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap;z-index:1}
+tbody td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+body.compact tbody td{padding:4px 10px}
+body.compact thead th{padding:6px 12px}
+body.compact .stat{padding:10px 14px}
+tbody tr:hover{background:rgba(88,166,255,.05)}
+tbody tr.warn td:first-child{border-left:3px solid var(--pink)}
+tbody tr.out td:first-child{border-left:3px solid var(--red)}
+tbody tr.warn .qty{color:var(--pink);font-weight:600}
+tbody tr.out .qty{color:var(--red);font-weight:600}
+tbody tr:last-child td{border-bottom:none}
+td.mpn{font-weight:500;cursor:pointer}
+td.mpn:hover{color:var(--accent);text-decoration:underline}
+td.qty-cell{white-space:nowrap}
+.qty{display:inline-block;min-width:34px;text-align:center;font-variant-numeric:tabular-nums}
+.step{width:22px;height:22px;border-radius:6px;border:1px solid var(--border2);background:var(--panel2);color:var(--text);cursor:pointer;line-height:1;font-size:14px}
+.step:hover{border-color:var(--accent);color:var(--accent)}
+.badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;background:rgba(88,166,255,.12);color:var(--accent);border:1px solid rgba(88,166,255,.3)}
+.badge.other{background:rgba(139,148,158,.12);color:var(--muted);border-color:rgba(139,148,158,.3)}
+.badge.green{background:rgba(63,185,80,.12);color:var(--green);border-color:rgba(63,185,80,.3)}
+.badge.amber{background:rgba(210,153,34,.12);color:var(--amber);border-color:rgba(210,153,34,.3)}
+.badge.red{background:rgba(248,81,73,.12);color:var(--red);border-color:rgba(248,81,73,.3)}
+.badge.pink{background:rgba(201,71,111,.14);color:var(--pink);border-color:rgba(201,71,111,.35)}
+.op{display:flex;gap:4px;justify-content:flex-end}
+.icon-btn{width:26px;height:26px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.icon-btn:hover{border-color:var(--accent);color:var(--accent)}
+.icon-btn.del:hover{border-color:var(--red);color:var(--red)}
+.icon-btn svg{width:14px;height:14px}
+mark{background:rgba(210,153,34,.4);color:inherit;border-radius:3px;padding:0 1px}
+.empty{padding:60px 20px;text-align:center;color:var(--muted)}
+.empty .big{font-size:15px;margin-bottom:8px}
+.modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-start;justify-content:center;z-index:50;padding:40px 16px;overflow:auto}
+.modal-mask.show{display:flex}
+.modal{background:var(--panel);border:1px solid var(--border2);border-radius:14px;width:100%;max-width:560px;padding:20px}
+.modal.wide{max-width:800px}
+.modal h2{font-size:16px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
+.modal h2 .close{width:28px;height:28px;border-radius:8px;border:none;background:transparent;color:var(--muted);font-size:16px;cursor:pointer}
+.modal h2 .close:hover{color:var(--text);background:var(--panel2)}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fg{display:flex;flex-direction:column;gap:5px}
+.fg.full{grid-column:1/-1}
+.fg label{font-size:12px;color:var(--muted)}
+.fg label em{color:var(--red);font-style:normal}
+.fg input,.fg select,.fg textarea{background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:13px;outline:none}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--accent)}
+.fg textarea{resize:vertical;min-height:54px}
+.form-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+.form-actions.left{justify-content:flex-start}
+.drop{background:var(--panel2);border:2px dashed var(--border2);border-radius:12px;padding:24px 20px;text-align:center;color:var(--muted);cursor:pointer;transition:border-color .15s}
+.drop:hover,.drop.over{border-color:var(--accent);color:var(--accent)}
+.drop input{display:none}
+.paste{width:100%;min-height:88px;background:var(--panel2);border:1px dashed var(--border2);border-radius:10px;color:var(--text);padding:10px 12px;font-size:12px;font-family:ui-monospace,monospace;outline:none;resize:vertical;margin-top:10px}
+.paste:focus{border-color:var(--accent)}
+.map-table{width:100%;border-collapse:collapse;margin:14px 0}
+.map-table th{text-align:left;font-size:12px;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--border)}
+.map-table td{padding:6px 8px;border-bottom:1px solid var(--border)}
+.map-table select{width:100%;padding:6px 8px}
+.preview{background:var(--panel2);border:1px solid var(--border);border-radius:9px;padding:10px;overflow:auto;max-height:180px;font-size:12px}
+.preview table{min-width:0;width:auto}
+.preview td,.preview th{padding:4px 10px;white-space:nowrap}
+.seg{display:flex;gap:12px;margin:10px 0;color:var(--muted);font-size:13px;align-items:center;flex-wrap:wrap}
+.seg label{display:flex;align-items:center;gap:5px;cursor:pointer}
+.seg input{accent-color:var(--accent)}
+.note{color:var(--muted);font-size:12px;margin-top:8px}
+.banner{display:none;align-items:center;gap:10px;background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.35);color:var(--red);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px}
+.banner.show{display:flex}
+.banner b{margin-right:2px}
+.banner.green{background:rgba(63,185,80,.1);border-color:rgba(63,185,80,.35);color:var(--green)}
+.banner.amber{background:rgba(210,153,34,.1);border-color:rgba(210,153,34,.35);color:var(--amber)}
+.banner.pink{background:rgba(201,71,111,.1);border-color:rgba(201,71,111,.35);color:var(--pink)}
+.toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,14px);background:var(--panel2);border:1px solid var(--border2);border-radius:10px;padding:10px 18px;font-size:13px;opacity:0;pointer-events:none;transition:transform .22s ease,opacity .22s ease;z-index:99}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.btn{transition:border-color .15s ease,color .15s ease,background .15s ease}
+.banner,.guide,.batch-bar{animation:slideDown .25s ease}
+@keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+.modal-mask.show{animation:fadeIn .18s ease}
+.modal-mask.show .modal{animation:popIn .2s ease}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes popIn{from{opacity:0;transform:scale(.96) translateY(8px)}to{opacity:1;transform:none}}
+.qty{transition:transform .18s ease}
+.qty.bump{transform:scale(1.3)}
+.badge{transition:transform .15s ease}
+@media (prefers-reduced-motion:reduce){.btn,.qty,.toast{transition:none}.banner,.guide,.batch-bar,.modal-mask.show,.modal-mask.show .modal{animation:none}}
+.set-sec{margin-bottom:18px}
+.set-sec h3{font-size:13px;color:var(--muted);font-weight:500;margin-bottom:8px}
+.cols-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px 12px}
+.log-list{max-height:380px;overflow:auto;border:1px solid var(--border);border-radius:9px}
+.log-row{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px}
+.log-row:last-child{border-bottom:none}
+.log-t{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap}
+.bak-btn{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
+.stat-flex{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start}
+.stat-card{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;flex:1;min-width:280px}
+.stat-card h3{font-size:13px;color:var(--muted);font-weight:500;margin-bottom:10px}
+.legend{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.9}
+.legend span{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.bom-summary{display:flex;gap:14px;margin-bottom:12px;flex-wrap:wrap}
+.bom-summary .bs{background:var(--panel2);border:1px solid var(--border);border-radius:9px;padding:8px 14px;font-size:13px}
+.bom-summary .bs b{font-size:18px;margin-right:4px}
+.bom-summary .bs.g b{color:var(--green)}
+.bom-summary .bs.a b{color:var(--amber)}
+.bom-summary .bs.r b{color:var(--red)}
+.kbd{display:inline-block;padding:1px 6px;border:1px solid var(--border2);border-radius:5px;font-size:11px;background:var(--panel2);color:var(--muted);font-family:ui-monospace,monospace}
+.guide{display:none;background:var(--panel);border:1px solid var(--accent2);border-radius:12px;padding:14px 16px;margin-bottom:14px;align-items:center;gap:14px;flex-wrap:wrap}
+.guide.show{display:flex}
+.guide b{font-size:15px}
+.guide-sub{color:var(--muted);font-size:12px;margin-top:3px}
+.guide-actions{display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap}
+.batch-bar{display:none;align-items:center;gap:10px;background:rgba(88,166,255,.08);border:1px solid rgba(88,166,255,.3);border-radius:10px;padding:8px 14px;margin-bottom:10px;font-size:13px;flex-wrap:wrap}
+.batch-bar.show{display:flex}
+.batch-bar b{color:var(--accent)}
+.mini{background:transparent;border:1px solid var(--border2);border-radius:7px;color:var(--muted);font-size:11px;padding:2px 8px;cursor:pointer;margin-left:8px}
+.mini:hover{border-color:var(--accent);color:var(--accent)}
+.toast.ok{border-color:var(--green);color:var(--green)}
+.toast.warn{border-color:var(--amber);color:var(--amber)}
+.toast.err{border-color:var(--red);color:var(--red)}
+.fg input.err,.fg select.err{border-color:var(--red);box-shadow:0 0 0 2px rgba(248,81,73,.15)}
+.clickable{cursor:pointer;transition:border-color .15s}
+.clickable:hover{border-color:var(--accent)}
+.stat .v.sub{font-size:12px;color:var(--muted);font-weight:400;margin-top:2px}
+.row-sel,.sel-all{accent-color:var(--accent);cursor:pointer}
+tbody tr.sel-row{background:rgba(88,166,255,.08)}
+@media(max-width:760px){.stats{grid-template-columns:repeat(2,1fr)}.form-grid{grid-template-columns:1fr}.cols-grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"/><path d="M4 7h16v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7z"/><path d="M9 7v7l3-3 3 3V7"/></svg></div>
+    <div>
+      <h1>元器件库存管理</h1>
+      <div class="sub">本地存储 · BOM 智能匹配 · 单位等价搜索 · 备份撤销 · 低库存预警</div>
+    </div>
+    <div class="save-state"><span class="dot"></span><span id="saveState">已自动保存</span></div>
+  </header>
+
+  <div class="banner" id="lowBanner" onclick="jumpLow()" title="点击筛选预警/缺货器件"><b>低库存预警:</b><span id="lowList"></span></div>
+
+  <div class="guide" id="guide">
+    <div>
+      <b>欢迎使用元器件库存管理</b>
+      <div class="guide-sub">数据仅保存在本浏览器 · 支持立创 CSV 导入 · 可随时导出备份</div>
+    </div>
+    <div class="guide-actions">
+      <button class="btn fsbtn" onclick="enableFS()" title="把数据保存到 HTML 同目录的 data/ 文件夹(需 Chrome/Edge,一次性授权选择目录)">启用文件存储</button>
+      <button class="btn primary" onclick="seedDemo()">载入示例数据</button>
+      <button class="btn" onclick="openImport()">导入立创 CSV</button>
+      <button class="btn accent" onclick="openBom()">BOM 核对缺料</button>
+      <button class="icon-btn" onclick="hideGuide()" title="关闭引导">✕</button>
+    </div>
+  </div>
+
+  <section class="stats">
+    <div class="stat clickable" onclick="clearFilters()" title="清除全部筛选"><div class="k">库存种类</div><div class="v accent" id="stCount">0</div><div class="v sub">点击清除筛选</div></div>
+    <div class="stat"><div class="k">库存总件数</div><div class="v" id="stQty">0</div></div>
+    <div class="stat clickable" onclick="jumpLow()" title="点击筛选预警/缺货器件"><div class="k">低库存预警</div><div class="v red" id="stLow">0</div><div class="v sub" id="stLowSub">缺货 0 · 预警 0</div></div>
+    <div class="stat"><div class="k">库存估值 (¥)</div><div class="v green" id="stVal">0</div></div>
+  </section>
+
+  <section class="toolbar">
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="q" type="text" placeholder="模糊搜索:输入任意片段(支持 1k=1000、1uf=1000000pf 等价换算)…" autocomplete="off">
+      <button id="modeBtn" class="mode-btn" onclick="toggleMode()" title="切换 模糊 / 精准 搜索">模糊</button>
+    </div>
+    <select id="fCat" title="按类别筛选"><option value="">全部类别</option></select>
+    <select id="fPkg" title="按封装筛选"><option value="">全部封装</option></select>
+    <select id="fStatus" title="按库存状态筛选"><option value="">全部状态</option><option value="ok">充足</option><option value="warn">预警</option><option value="out">缺货</option></select>
+    <label class="chk"><input type="checkbox" id="fHideOut" onchange="render()" title="从列表隐藏缺货(红色)器件">隐藏缺货</label>
+    <select id="sort" title="排序">
+      <option value="updated">最近更新</option>
+      <option value="mpn">型号 A-Z</option>
+      <option value="loc">位置排序</option>
+      <option value="qtyAsc">数量 ↑</option>
+      <option value="qtyDesc">数量 ↓</option>
+    </select>
+    <button class="btn accent" onclick="openBom()" title="粘贴 BOM 核对库存,自动标出缺料">BOM 匹配</button>
+    <button class="btn" onclick="openStat()" title="分类分布 / 库存趋势统计">统计</button>
+    <button class="btn primary" onclick="openEdit()" title="Ctrl+A">＋ 添加器件</button>
+    <button class="btn" onclick="openImport()">导入 CSV</button>
+    <button class="btn" onclick="exportCSV()">导出 CSV</button>
+    <button class="btn" onclick="undo()" title="回退最近一次修改(Ctrl+Z,仅当前会话)">↺ 撤销</button>
+    <button class="btn" onclick="openModal('backMask')">备份恢复</button>
+    <button class="btn" onclick="openLogs()">操作记录</button>
+    <button class="btn" onclick="openSet()">显示设置</button>
+  </section>
+
+  <div class="batch-bar" id="batchBar">
+    <span>已选 <b id="selCount">0</b> 项</span>
+    <button class="btn" onclick="batchDel()" title="删除选中项(可撤销)">批量删除</button>
+    <button class="btn" onclick="batchLoc()" title="统一设置选中项存放位置">批量改位置</button>
+    <button class="btn" onclick="batchCat()" title="统一设置选中项类别">批量改类别</button>
+    <button class="btn" onclick="openBatchPrice()" title="对照立创商城为选中项批量填写最小起订价">批量查价</button>
+    <button class="btn warn" onclick="clearSel()">取消选择</button>
+  </div>
+
+  <div class="res-note" id="resNote"></div>
+
+  <div class="table-wrap">
+    <table>
+      <thead id="thead"></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty" id="emptyBox" style="display:none">
+      <div class="big">还没有元器件数据</div>
+      点击「示例数据」体验,或「导入 CSV」从立创商城批量导入;也可用「BOM 匹配」直接核对设计清单
+    </div>
+  </div>
+</div>
+
+<div class="modal-mask" id="editMask">
+  <div class="modal">
+    <h2><span id="editTitle">添加器件</span><button class="close" onclick="closeModal('editMask')">✕</button></h2>
+    <form id="editForm" onsubmit="saveItem(event)">
+      <div class="form-grid">
+        <div class="fg full"><label>型号 / 名称 <em>*</em></label><input id="eMpn" required oninput="this.classList.remove('err')" placeholder="如:AMS1117-3.3 或 10K 贴片电阻"></div>
+        <div class="fg"><label>类别</label><select id="eCat" onchange="onCatChange()"></select></div>
+        <div class="fg"><label>封装</label><input id="ePkg" list="pkgList" placeholder="如 0603 / SOP-8"></div>
+        <datalist id="pkgList"></datalist>
+        <div class="fg"><label id="lVal">参数值</label><input id="eVal" placeholder="如 10kΩ ±1%"></div>
+        <div class="fg" id="fSub1" style="display:none"><label id="lSub1">子参数 1</label><input id="eSub1"></div>
+        <div class="fg" id="fSub2" style="display:none"><label id="lSub2">子参数 2</label><input id="eSub2"></div>
+        <div class="fg" id="fSub3" style="display:none"><label id="lSub3">子参数 3</label><input id="eSub3"></div>
+        <div class="fg"><label>存放位置</label><input id="eLoc" placeholder="留空则按类别前缀自动生成"></div>
+        <div class="fg"><label>数量</label><input id="eQty" type="number" min="0" value="0"></div>
+        <div class="fg"><label>低库存阈值</label><input id="eTh" type="number" min="0" value="10"></div>
+        <div class="fg"><label>LCSC 编号</label><input id="eLcsc" placeholder="如 C14663"></div>
+        <div class="fg"><label>单价 (¥)</label><input id="ePrice" type="number" min="0" step="0.0001" value="0"></div>
+        <div class="fg full"><label>备注</label><textarea id="eNote" placeholder="供应商 / 购买批次 / 注意事项…"></textarea></div>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn" onclick="fillPriceFromLcsc()" title="打开立创商城并对照最小起订价填入单价">立创查价</button>
+        <span style="flex:1"></span>
+        <button type="button" class="btn" onclick="closeModal('editMask')">取消</button>
+        <button type="submit" class="btn primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-mask" id="impMask">
+  <div class="modal wide">
+    <h2><span>导入 CSV</span><button class="close" onclick="closeModal('impMask')">✕</button></h2>
+    <div id="impStep1">
+      <div class="drop" id="drop">
+        <div style="font-size:15px;margin-bottom:6px">点击选择文件,或将 CSV 拖到这里</div>
+        <div style="font-size:12px">支持立创商城订单导出、立创 EDA BOM、Excel 另存的 CSV</div>
+        <input type="file" id="file" accept=".csv,text/csv,text/plain">
+      </div>
+      <div class="form-actions left" style="margin-top:12px">
+        <button class="btn" onclick="dlTemplate()" title="下载带示例行的标准模板">下载 CSV 模板</button>
+        <span class="note" style="margin:0;align-self:center">或直接粘贴 CSV 文本,点「解析粘贴内容」</span>
+      </div>
+      <textarea id="pasteArea" class="paste" placeholder="将 CSV 文本粘贴到这里(表头 + 数据行)…"></textarea>
+      <div class="form-actions left" style="margin-top:8px">
+        <button class="btn" onclick="parsePaste()">解析粘贴内容</button>
+      </div>
+      <div class="note">提示:立创商城「订单详情 → 导出」或「立创 EDA → BOM 表导出 CSV」均可直接导入;若 CSV 含「单价/金额」列会自动识别为单价,单价为空的可点「立创查价」对照立创商城最小起订价填写。若用 Excel 导出,请选「CSV UTF-8」编码。导入前会自动备份,可随时撤销。</div>
+    </div>
+    <div id="impStep2" style="display:none">
+      <div class="seg">
+        <label>导入模式:</label>
+        <label><input type="radio" name="mode" value="merge" checked> 合并(同型号同封装自动累加数量)</label>
+        <label><input type="radio" name="mode" value="append"> 追加(全部新增)</label>
+      </div>
+      <div style="font-size:13px;color:var(--muted)">已读取 <b id="impRows" style="color:var(--text)">0</b> 行数据。请确认每一列对应的字段:</div>
+      <table class="map-table" id="mapTable"></table>
+      <div class="preview"><table id="impPrev"></table></div>
+      <div class="form-actions">
+        <button class="btn" onclick="backImport()">返回</button>
+        <button class="btn primary" onclick="doImport()">开始导入</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-mask" id="bomMask">
+  <div class="modal wide">
+    <h2><span>BOM 智能匹配</span><button class="close" onclick="closeModal('bomMask')">✕</button></h2>
+    <div class="drop" id="bomDrop">
+      <div style="font-size:14px;margin-bottom:4px">点击或拖入立创 EDA 导出的 BOM CSV</div>
+      <div style="font-size:12px">标准 9 列格式:Comment / Footprint / Value / Category / Description / Supplier Part / Manufacturer Part…</div>
+      <input type="file" id="bomFile" accept=".csv,text/csv,text/plain">
+    </div>
+    <textarea id="bomText" class="paste" placeholder="或直接粘贴 BOM CSV 文本(含表头),点「解析并匹配」…"></textarea>
+    <div class="form-actions left" style="margin-top:10px">
+      <button class="btn primary" onclick="parseBom()">解析并匹配</button>
+      <button class="btn" onclick="demoBom()">示例 BOM</button>
+    </div>
+    <div id="bomRes" style="margin-top:14px"></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="statMask">
+  <div class="modal wide">
+    <h2><span>统计看板</span><button class="close" onclick="closeModal('statMask')">✕</button></h2>
+    <div id="statBody"></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="priceMask">
+  <div class="modal wide">
+    <h2><span>批量查价(立创商城最小起订价)</span><button class="close" onclick="closeModal('priceMask')">✕</button></h2>
+    <div class="note" style="margin-bottom:10px">点击「打开立创」在新标签页查看该器件价格梯度<b>第一档(最小起订价)</b>,在输入框中填写单价,点「保存单价」一次写回。</div>
+    <div class="log-list" id="priceList" style="max-height:320px"></div>
+    <div class="form-actions">
+      <button class="btn" onclick="closeModal('priceMask')">取消</button>
+      <button class="btn primary" onclick="batchPriceSave()">保存单价</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-mask" id="backMask">
+  <div class="modal">
+    <h2><span>备份与恢复</span><button class="close" onclick="closeModal('backMask')">✕</button></h2>
+    <div style="font-size:13px;color:var(--muted);line-height:1.7">
+      默认数据保存在<b style="color:var(--text)">当前浏览器</b>中;可启用「文件存储」改为保存到 <b style="color:var(--text)">HTML 同目录的 data/ 文件夹</b>(换浏览器、换电脑数据跟随文件夹,更安全)。<br>
+      导入备份会<b style="color:var(--red)">覆盖</b>当前数据,导入前会自动留一次可撤销快照。
+    </div>
+    <div class="bak-btn">
+      <button class="btn primary" onclick="exportBackup()">导出 JSON 备份</button>
+      <button class="btn" onclick="$('bakFile').click()">导入备份 (JSON)</button>
+      <button class="btn fsbtn" onclick="enableFS()">启用文件存储(data/)</button>
+      <button class="btn warn" onclick="dlTemplate()">下载 CSV 模板</button>
+    </div>
+    <div class="set-sec" style="margin-top:16px">
+      <h3>存储环境诊断</h3>
+      <div class="log-list" id="diagBody" style="max-height:210px"></div>
+      <div class="form-actions left" style="margin-top:8px">
+        <button class="btn" onclick="runDiag()">重新诊断</button>
+        <span class="note" style="margin:0;align-self:center">文件存储需:Chrome/Edge(87+)+ 安全上下文(http 或 https 访问)</span>
+      </div>
+    </div>
+    <input type="file" id="bakFile" accept=".json,application/json" style="display:none">
+    <div class="note">说明:「撤销」可回退最近修改(最多 50 步,仅当前会话);「操作记录」可查看全部增删改与出入库历史;CSV 导出(主工具栏)适合用 Excel 查看或迁移。</div>
+  </div>
+</div>
+
+<div class="modal-mask" id="logMask">
+  <div class="modal">
+    <h2><span>操作记录(最多保留 200 条)</span><button class="close" onclick="closeModal('logMask')">✕</button></h2>
+    <div class="log-list" id="logList"></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="setMask">
+  <div class="modal">
+    <h2><span>显示设置</span><button class="close" onclick="closeModal('setMask')">✕</button></h2>
+    <div class="set-sec">
+      <h3>显示列</h3>
+      <div class="cols-grid" id="setCols"></div>
+    </div>
+    <div class="set-sec">
+      <h3>位置编号前缀(类别 → 前缀,编辑器件时自动应用)</h3>
+      <div class="cols-grid" id="setPre"></div>
+    </div>
+    <div class="set-sec">
+      <h3>行密度</h3>
+      <div class="seg">
+        <label><input type="radio" name="density" value="comfort" onchange="setDensity('comfort')"> 舒适</label>
+        <label><input type="radio" name="density" value="compact" onchange="setDensity('compact')"> 紧凑</label>
+      </div>
+    </div>
+    <div class="set-sec">
+      <h3>主题</h3>
+      <div class="seg">
+        <label><input type="radio" name="theme" value="dark" onchange="setTheme('dark')"> 深色</label>
+        <label><input type="radio" name="theme" value="light" onchange="setTheme('light')"> 浅色</label>
+      </div>
+    </div>
+    <div class="note">快捷键:<span class="kbd">Ctrl+F</span> 搜索 · <span class="kbd">Ctrl+A</span> 添加 · <span class="kbd">Ctrl+B</span> BOM 匹配 · <span class="kbd">Ctrl+Z</span> 撤销 · <span class="kbd">Esc</span> 关闭弹窗</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const KEY="lcsc-parts-inventory-v1";
+const SK="lcsc-parts-settings-v1";
+const LK="lcsc-parts-logs-v1";
+let items=[]; let rawRows=[]; let mapping=[]; let undoStack=[];
+const CATS=["电阻","电容","电感","二极管","三极管","MOSFET","LED","IC","晶体/振荡器","连接器","传感器","开关/按键","模块","其他"];
+const DEF_PRE={"电阻":"R","电容":"C","电感":"L","二极管":"D","三极管":"Q","MOSFET":"Q","LED":"D","IC":"U","晶体/振荡器":"Y","连接器":"J","传感器":"S","开关/按键":"K","模块":"M","其他":""};
+const TPL={
+  "电阻":["阻值","精度","功率"],"电容":["容值","耐压","精度"],"电感":["感值","电流","精度"],
+  "二极管":["反向电压","正向电流","类型"],"三极管":["类型","电流","增益"],"MOSFET":["耐压","电流","类型"],
+  "LED":["颜色","正向电压","电流"],"IC":["功能","工作电压","封装说明"],
+  "晶体/振荡器":["频率","负载电容","类型"],"连接器":["规格","引脚数","间距"],"传感器":["型号","接口","量程"],
+  "开关/按键":["规格","类型","引脚数"],"模块":["型号","接口","供电"],"其他":["参数"]
+};
+const COL_DEFS=[
+  {k:"mpn",t:"型号 / 名称",w:"150px"},{k:"category",t:"类别",w:""},{k:"pkg",t:"封装",w:""},{k:"val",t:"参数",w:""},
+  {k:"qty",t:"数量",w:"96px"},{k:"loc",t:"位置",w:""},{k:"th",t:"阈值",w:"64px"},{k:"lcsc",t:"LCSC 编号",w:""},
+  {k:"price",t:"单价 ¥",w:"72px"},{k:"note",t:"备注",w:""}
+];
+const ACT={add:["新增","var(--green)"],edit:["编辑","var(--accent)"],del:["删除","var(--red)"],in:["入库","var(--green)"],out:["领用","var(--amber)"],imp:["导入","var(--purple)"],undo:["撤销","var(--muted)"],restore:["恢复备份","var(--purple)"]};
+const ALIAS={
+  mpn:["型号","名称","name","comment","comment_m","value","part_number","partno","mpn","器件名","器件型号","厂商型号"],
+  category:["类别","分类","category","type","kind","器件类型"],pkg:["封装","footprint","package","pkg","尺寸","外形"],
+  val:["参数","参数值","规格","spec","description","描述","说明","values"],qty:["数量","quantity","qty","count","库存","库存数量"],
+  loc:["位置","存放位置","location","drawer","库位","bin","放置位置"],th:["阈值","低库存阈值","threshold"],
+  lcsc:["编号","lcsc","立创编号","料号","商品编号","订单编号","供应商料号","supplier part","商品编码","lcsc编号","lcsc code","part no","jlc part"],
+  price:["单价","price","unit price","价格","成本"],note:["备注","note","remark","备注信息"]
+};
+const FIELD_NAMES={mpn:"型号/名称",category:"类别",pkg:"封装",val:"参数",qty:"数量",loc:"位置",th:"阈值",lcsc:"LCSC编号",price:"单价",note:"备注"};
+const BOM_ALIAS={
+  comment:["comment","名称","name","value"],footprint:["footprint","封装","package"],designator:["designator","位号","ref"],
+  qty:["quantity","qty","数量","count"],value:["value","数值","值","规格"],category:["primary category","category","类别","分类"],
+  desc:["description","描述","说明"],lcsc:["supplier part","lcsc","供应商料号","立创编号"],mpn:["manufacturer part","manufacturer","厂商型号","型号","mpn"]
+};
+const PALETTE=["#58a6ff","#3fb950","#d29922","#f85149","#bc8cff","#39c5cf","#db6d28","#a5d6ff","#7ee787","#ffa657","#8b949e","#f778ba"];
+const LC_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>';
+let settings={searchMode:"fuzzy",theme:"dark",density:"comfort",prefixes:Object.assign({},DEF_PRE),columns:{mpn:1,category:1,pkg:1,val:1,qty:1,loc:1,th:1,lcsc:1,price:0,note:1}};
+let logs=[];
+
+function $(id){return document.getElementById(id)}
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function regEscape(s){return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}
+function num(v,d){const n=parseFloat(v);return isFinite(n)?n:d}
+function now(){return Date.now()}
+function fmtTime(t){const d=new Date(t);const p=n=>String(n).padStart(2,"0");return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`}
+function toast(msg,type){const t=$("toast");t.textContent=msg;t.className="toast"+(type?" "+type:"");t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),2400)}
+function save(){
+  try{
+    localStorage.setItem(KEY,JSON.stringify(items));
+    localStorage.setItem(SK,JSON.stringify(settings));
+    localStorage.setItem(LK,JSON.stringify(logs.slice(0,100)));
+    $("saveState").textContent=(FS.mode==="file"?"文件存储: data/ · ":"已保存(浏览器本地) · ")+new Date().toLocaleTimeString("zh-CN",{hour12:false});
+  }catch(e){toast("保存失败:存储空间可能已满,请导出备份","err")}
+  if(FS.mode==="file"){
+    FS.writeFile("components.json",JSON.stringify(items));
+    FS.writeFile("settings.json",JSON.stringify(settings));
+    FS.writeFile("logs.json",JSON.stringify(logs.slice(0,200)));
+  }
+}
+function load(){
+  try{
+    items=JSON.parse(localStorage.getItem(KEY)||"[]");
+    items.forEach(normalizeItem);
+  }catch(e){items=[]}
+}
+function loadSettings(){try{const s=JSON.parse(localStorage.getItem(SK)||"{}");Object.assign(settings,s);Object.assign(settings.columns,(s.columns||{}));settings.prefixes=Object.assign({},DEF_PRE,(s.prefixes||{}))}catch(e){}}
+function saveSettings(){try{localStorage.setItem(SK,JSON.stringify(settings))}catch(e){}}
+function loadLogs(){try{logs=JSON.parse(localStorage.getItem(LK)||"[]")}catch(e){logs=[]}}
+function saveLogs(){try{localStorage.setItem(LK,JSON.stringify(logs.slice(0,100)))}catch(e){}}
+function logAct(a,d,n){logs.unshift({t:now(),a,d,n:n||0});if(logs.length>200)logs.pop();saveLogs()}
+function snapshot(){undoStack.push(JSON.parse(JSON.stringify(items)));if(undoStack.length>50)undoStack.shift()}
+function openModal(id){$(id).classList.add("show");if(id==="backMask")runDiag()}
+function closeModal(id){$(id).classList.remove("show");if(id==="impMask")resetImport()}
+function applySettings(){
+  document.body.classList.toggle("light",settings.theme==="light");
+  document.body.classList.toggle("compact",settings.density==="compact");
+  const exact=settings.searchMode==="exact";
+  const mb=$("modeBtn");mb.textContent=exact?"精准":"模糊";mb.classList.toggle("on",exact);
+  $("q").placeholder=exact?"精准搜索:关键词需与 型号/LCSC/类别/封装/位置 完全一致,参数为包含匹配":"模糊搜索:输入任意片段(支持 1k=1000、1uf=1000000pf 等价换算)…";
+}
+function toggleMode(){settings.searchMode=settings.searchMode==="exact"?"fuzzy":"exact";saveSettings();applySettings();render()}
+function undo(){
+  if(!undoStack.length){toast("没有可撤销的操作(撤销仅当前会话内有效)");return}
+  items=undoStack.pop();logAct("undo","");save();render();toast("已撤销上一步操作");
+}
+
+/* ---------- 单位换算引擎 ---------- */
+/* ---------- 单位换算引擎(大小写敏感:MΩ=兆欧, mΩ=毫欧) ---------- */
+function normValue(s){
+  if(s==null)return null;
+  let t=String(s).replace(/[≈~约¥,，]/g,"").replace(/\s+/g,"");
+  if(!t)return null;
+  const m=t.match(/^(-?[\d.]+)([a-zA-ZΩωμ]*)$/);
+  if(!m)return null;
+  const num=parseFloat(m[1]);if(!isFinite(num))return null;
+  const u=m[2]||"";
+  if(!u)return{v:num,base:null,raw:s};
+  const mm=u.match(/(ohm|Ω|ω|f|h|hz|v|w|a)$/i);
+  let base=null,pre=u;
+  if(mm){
+    base=mm[1].toLowerCase();if(base==="ω")base="ohm";
+    pre=u.slice(0,u.length-mm[1].length);
+    if(!pre)return{v:num,base,raw:s};
+  }
+  let mul=1;
+  if(pre){
+    if(/^k$/i.test(pre))mul=1e3;
+    else if(pre==="M")mul=1e6;
+    else if(pre==="m")mul=(base==="hz"?1e6:1e-3);
+    else if(pre==="u"||pre==="U"||pre==="μ")mul=1e-6;
+    else if(pre==="n"||pre==="N")mul=1e-9;
+    else if(pre==="p"||pre==="P")mul=1e-12;
+    else return null;
+  }else{
+    if(u==="m"||u==="M")mul=1e6;
+    else if(u==="u"||u==="U"||u==="μ")mul=1e-6;
+    else if(u==="n"||u==="N")mul=1e-9;
+    else if(u==="p"||u==="P")mul=1e-12;
+    else if(u==="k"||u==="K")mul=1e3;
+    else return null;
+  }
+  return{v:num*mul,base,raw:s};
+}
+function itemNorms(it){
+  const out=[];
+  [it.val,it.mpn,it.sub1,it.sub2,it.sub3].forEach(s=>{
+    if(!s)return;
+    String(s).toLowerCase().split(/[^0-9a-zμΩ.]+/i).forEach(tk=>{const n=normValue(tk);if(n)out.push(n)});
+  });
+  return out;
+}
+function normEq(a,b){return a&&b&&Math.abs(a.v-b.v)<1e-9&&(a.base===b.base||!a.base||!b.base)}
+function wordMatch(it,w){
+  const hay=[it.mpn,it.val,it.pkg,it.loc,it.lcsc,it.note,it.category,it.sub1,it.sub2,it.sub3].join(" ").toLowerCase();
+  if(hay.includes(w))return true;
+  const qn=normValue(w);
+  if(qn)return itemNorms(it).some(n=>normEq(n,qn));
+  return false;
+}
+
+/* ---------- 筛选 / 渲染 ---------- */
+function badge(c,cls){return `<span class="badge${cls?" "+cls:""}">${esc(c||"其他")}</span>`}
+function hl(s){
+  let out=esc(s);
+  if(settings.searchMode==="fuzzy"){
+    $("q").value.trim().split(/\s+/).filter(Boolean).forEach(w=>{
+      out=out.replace(new RegExp("("+regEscape(esc(w))+")","gi"),"<mark>$1</mark>");
+    });
+  }
+  return out;
+}
+function hitExact(it,w){
+  return [it.mpn,it.lcsc,it.category,it.pkg,it.loc].some(v=>String(v||"").toLowerCase()===w)
+      || String(it.val||"").toLowerCase().includes(w);
+}
+function filtered(){
+  const q=$("q").value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const fc=$("fCat").value,fp=$("fPkg").value,fs=$("fStatus").value,exact=settings.searchMode==="exact";
+  const hideOut=$("fHideOut")?$("fHideOut").checked:false;
+  return items.filter(it=>{
+    if(hideOut&&it.qty===0)return false;
+    if(fc&&it.category!==fc)return false;
+    if(fp&&it.pkg!==fp)return false;
+    if(fs==="ok"&&!(it.qty>it.th))return false;
+    if(fs==="warn"&&!(it.qty>0&&it.qty<=it.th))return false;
+    if(fs==="out"&&!(it.qty===0))return false;
+    if(q.length){
+      if(exact){if(!q.every(w=>hitExact(it,w)))return false}
+      else if(!q.every(w=>wordMatch(it,w)))return false;
+    }
+    return true;
+  });
+}
+function cell(it,c){
+  switch(c.k){
+    case "mpn":return `<td class="mpn" onclick="copyMpn('${it.id}')" title="点击复制型号">${hl(it.mpn)}</td>`;
+    case "category":return `<td>${badge(it.category,it.category&&CATS.includes(it.category)?"":"other")}</td>`;
+    case "qty":return `<td class="qty-cell"><button class="step" onclick="stepQty('${it.id}',-1)" title="领用 1">−</button><span class="qty" id="qty_${it.id}" onclick="qtyPrompt('${it.id}')" title="点击快速调整数量(支持 +20 / -5 / 直接输入)" style="cursor:pointer">${it.qty}</span><button class="step" onclick="stepQty('${it.id}',1)" title="入库 1">＋</button></td>`;
+    case "th":return `<td style="color:var(--muted)">${it.th}</td>`;
+    case "lcsc":return `<td style="font-family:ui-monospace,monospace;font-size:12px">${hl(it.lcsc)||"<span style='color:var(--muted)'>—</span>"}</td>`;
+    case "price":return `<td>${it.price>0?"¥ "+it.price:"<span style='color:var(--muted)'>—</span>"}</td>`;
+    case "note":return `<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(it.note)}">${esc(it.note)||"<span style='color:var(--muted)'>—</span>"}</td>`;
+    default:return `<td>${hl(it[c.k])||"<span style='color:var(--muted)'>—</span>"}</td>`;
+  }
+}
+function locSortKey(s){const m=String(s||"").match(/^([a-zA-Z]+)(?:[-_]*)(\d*)/);return[(m&&m[1]||"").toUpperCase(),parseInt(m&&m[2],10)||0]}
+function cmpLoc(a,b){
+  const x=locSortKey(a),y=locSortKey(b);
+  if(!x[0]&&!y[0])return 0;
+  if(!x[0])return 1;
+  if(!y[0])return -1;
+  return x[0]===y[0]?x[1]-y[1]:x[0]<y[0]?-1:1;
+}
+function render(){
+  const list=filtered();
+  const sort=$("sort").value;
+  list.sort((a,b)=>{
+    if(sort==="mpn")return a.mpn.localeCompare(b.mpn,"zh");
+    if(sort==="loc")return cmpLoc(a.loc,b.loc);
+    if(sort==="qtyAsc")return a.qty-b.qty;
+    if(sort==="qtyDesc")return b.qty-a.qty;
+    return (b.updated||0)-(a.updated||0);
+  });
+  const cols=COL_DEFS.filter(c=>settings.columns[c.k]);
+  const allSel=list.length>0&&list.every(i=>selSet.has(i.id));
+  $("thead").innerHTML=`<tr><th style="width:34px"><input type="checkbox" class="sel-all" ${allSel?"checked":""} onchange="toggleAll(this.checked)" title="全选"></th>${cols.map(c=>`<th style="${c.w?"width:"+c.w:""}">${c.t}</th>`).join("")}<th style="width:76px">操作</th></tr>`;
+  const tb=$("tbody");
+  tb.innerHTML=list.map(it=>{
+    const out=it.qty===0;
+    const warn=!out&&it.qty<=it.th;
+    const sel=selSet.has(it.id);
+    return `<tr class="${out?"out":warn?"warn":""}${sel?" sel-row":""}" ondblclick="dblEdit(event,'${it.id}')">`
+      +`<td><input type="checkbox" class="row-sel" ${sel?"checked":""} onchange="toggleSel('${it.id}',this.checked)"></td>`
+      +cols.map(c=>cell(it,c)).join("")
+      +`<td><div class="op">
+        <button class="icon-btn" onclick="openLcsc('${it.id}')" title="在立创商城打开(首个结果即该器件,含最小起订价)">${LC_ICON}</button>
+        <button class="icon-btn" onclick="openEdit('${it.id}')" title="编辑(双击行也可)">✎</button>
+        <button class="icon-btn del" onclick="delItem('${it.id}')" title="删除(可撤销)">✕</button>
+      </div></td></tr>`;
+  }).join("");
+  $("emptyBox").style.display=items.length?"none":"block";
+  if(items.length&&!list.length){tb.innerHTML=`<tr><td colspan="${cols.length+2}"><div class="empty">没有匹配的器件,换个关键词试试</div></td></tr>`}
+  const parts=[];
+  if($("q").value.trim())parts.push(settings.searchMode==="exact"?"精准搜索":"模糊搜索");
+  if($("fCat").value)parts.push("类别:"+$("fCat").value);
+  if($("fPkg").value)parts.push("封装:"+$("fPkg").value);
+  if($("fStatus").value)parts.push("状态:"+({ok:"充足",warn:"预警",out:"缺货"})[$("fStatus").value]);
+  $("resNote").innerHTML=`共 <b>${list.length}</b> / ${items.length} 条`+(parts.length?` · ${esc(parts.join(" · "))}`:"")
+    +`<button class="mini" onclick="exportCSV(true)" title="导出当前筛选结果">导出当前 ${list.length} 条</button>`;
+  const gd=$("guide");
+  gd.classList.toggle("show",items.length===0&&!localStorage.getItem("lcsc-guide-dismiss"));
+  updateBatchBar();
+  renderStats();
+}
+function allCats(){const s=new Set([...CATS]);items.forEach(i=>s.add(i.category||"其他"));return [...s]}
+function renderStats(){
+  $("stCount").textContent=items.length;
+  $("stQty").textContent=items.reduce((s,i)=>s+(i.qty||0),0).toLocaleString();
+  const lows=items.filter(i=>i.qty>0&&i.qty<=i.th),outs=items.filter(i=>i.qty===0);
+  $("stLow").textContent=lows.length+outs.length;
+  $("stLowSub").textContent=`缺货 ${outs.length} · 预警 ${lows.length}`;
+  const val=items.reduce((s,i)=>s+(i.qty||0)*(i.price||0),0);
+  $("stVal").textContent=val>=10000?val.toLocaleString("zh-CN",{maximumFractionDigits:0}):val.toFixed(2);
+  const bn=$("lowBanner");
+  if(lows.length+outs.length){
+    const arr=[...lows.map(i=>`<span style="color:var(--pink)">${esc(i.mpn)}(${i.qty}/${i.th})</span>`),...outs.map(i=>`<span style="color:var(--red)">${esc(i.mpn)}(缺货)</span>`)].slice(0,8);
+    $("lowList").innerHTML=arr.join("、")+(lows.length+outs.length>8?` 等 ${lows.length+outs.length} 项`:"");
+    bn.classList.add("show");
+  }else bn.classList.remove("show");
+  const cats=new Set(),pkgs=new Set();
+  items.forEach(i=>{cats.add(i.category||"其他");if(i.pkg)pkgs.add(i.pkg)});
+  fillSelect($("fCat"),[...cats].sort(),"全部类别");
+  fillSelect($("fPkg"),[...pkgs].sort(),"全部封装");
+  $("eCat").innerHTML='<option value="">选择类别…</option>'+allCats().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  autoSizeSelect($("eCat"));
+  const dl2=$("pkgList");
+  dl2.innerHTML=[...pkgs].map(p=>`<option value="${esc(p)}">`).join("");
+}
+function fillSelect(sel,vals,all){const cur=sel.value;sel.innerHTML=`<option value="">${all}</option>`+vals.map(v=>`<option>${esc(v)}</option>`).join("");sel.value=vals.includes(cur)?cur:"";autoSizeSelect(sel)}
+
+/* ---------- 编辑 / 参数模板 / 位置前缀 ---------- */
+function onCatChange(){
+  const cat=$("eCat").value;
+  const tpl=TPL[cat]||["参数"];
+  $("lVal").textContent=tpl[0]+(tpl[0]==="参数"?"值":"");
+  $("eVal").placeholder=tpl[0]?("如 "+tpl[0]+"…"):"";
+  $("lSub1").textContent=tpl[1]||"子参数 1";$("fSub1").style.display=tpl[1]?"flex":"none";
+  $("lSub2").textContent=tpl[2]||"子参数 2";$("fSub2").style.display=tpl[2]?"flex":"none";
+  $("lSub3").textContent=tpl[3]||"子参数 3";$("fSub3").style.display=tpl[3]?"flex":"none";
+}
+function bumpQty(id){
+  const q=$("qty_"+id);
+  if(q){q.classList.remove("bump");void q.offsetWidth;q.classList.add("bump");setTimeout(()=>q.classList.remove("bump"),220)}
+}
+function stepQty(id,d){
+  const it=items.find(x=>x.id===id);if(!it)return;
+  snapshot();
+  it.qty=Math.max(0,(it.qty||0)+d);it.updated=now();
+  logAct(d>0?"in":"out",it.mpn,1);
+  save();render();bumpQty(id);
+  if(it.qty>0&&it.qty<=it.th)toast(`「${it.mpn}」预警:剩余 ${it.qty} 件`);
+  else if(it.qty===0)toast(`「${it.mpn}」已缺货`);
+}
+function openEdit(id){
+  const it=id?items.find(x=>x.id===id):null;
+  $("eMpn").classList.remove("err");
+  $("editTitle").textContent=it?"编辑器件":"添加器件";
+  $("eMpn").value=it?it.mpn:"";
+  $("eCat").value=it?(it.category||""):"";
+  $("ePkg").value=it?(it.pkg||""):"";
+  $("eVal").value=it?((it.sub1||it.sub2||it.sub3)?(it.val||""):""):"";
+  $("eSub1").value=it?(it.sub1||""):"";
+  $("eSub2").value=it?(it.sub2||""):"";
+  $("eSub3").value=it?(it.sub3||""):"";
+  if(!(it&&(it.sub1||it.sub2||it.sub3))){ /* 旧数据:val 整体放主参数 */ }
+  else $("eVal").value=it?((it.val||"").split(" ")[0]||""):"";
+  $("eLoc").value=it?(it.loc||""):"";
+  $("eQty").value=it?it.qty:0;
+  $("eTh").value=it?it.th:10;
+  $("eLcsc").value=it?(it.lcsc||""):"";
+  $("ePrice").value=it?(it.price||""):"";
+  $("eNote").value=it?(it.note||""):"";
+  window._editId=id||null;
+  onCatChange();
+  openModal("editMask");
+}
+function saveItem(e){
+  e.preventDefault();
+  const mpn=$("eMpn").value.trim();if(!mpn){$("eMpn").classList.add("err");$("eMpn").focus();toast("请填写型号/名称","err");return}
+  $("eMpn").classList.remove("err");
+  const dup=items.find(x=>x.id!==(window._editId||"")&&x.mpn.toLowerCase()===mpn.toLowerCase());
+  if(dup)toast(`提示:库存已有同型号「${dup.mpn}」(${dup.qty} 件),请注意区分`, "warn");
+  const sub1=$("eSub1").value.trim(),sub2=$("eSub2").value.trim(),sub3=$("eSub3").value.trim();
+  const main=$("eVal").value.trim();
+  const val=[main,sub1,sub2,sub3].filter(Boolean).join(" ");
+  const cat=$("eCat").value.trim();
+  const pre=settings.prefixes[cat]||"";
+  const obj={
+    mpn,category:cat||"其他",pkg:$("ePkg").value.trim(),val,
+    sub1,sub2,sub3,
+    loc:$("eLoc").value.trim()||(pre?pre+"-1":""),
+    qty:Math.max(0,Math.round(num($("eQty").value,0))),
+    th:Math.max(0,Math.round(num($("eTh").value,10))),
+    lcsc:$("eLcsc").value.trim(),price:Math.max(0,num($("ePrice").value,0)),
+    note:$("eNote").value.trim(),updated:now()
+  };
+  snapshot();
+  if(window._editId){
+    const it=items.find(x=>x.id===window._editId);
+    if(it)Object.assign(it,obj);
+    logAct("edit",mpn);toast("已更新");
+  }else{
+    obj.id=Date.now()+"-"+Math.random().toString(36).slice(2,7);
+    items.push(obj);logAct("add",mpn);toast("已添加");
+  }
+  save();render();closeModal("editMask");
+}
+function delItem(id){
+  const it=items.find(x=>x.id===id);if(!it)return;
+  if(!confirm(`确定删除「${it.mpn}」吗?删除后可通过工具栏「撤销」恢复。`))return;
+  snapshot();
+  items=items.filter(x=>x.id!==id);
+  logAct("del",it.mpn);
+  save();render();toast("已删除(可撤销)");
+}
+function copyMpn(id){
+  const it=items.find(x=>x.id===id);if(!it)return;
+  const t=it.mpn;
+  const done=()=>toast("已复制型号: "+t);
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done,()=>fbCopy(t))}
+  else fbCopy(t);
+}
+function fbCopy(t){
+  const ta=document.createElement("textarea");ta.value=t;document.body.appendChild(ta);ta.select();
+  try{document.execCommand("copy");toast("已复制型号: "+t)}catch(e){toast("复制失败,请手动复制")}
+  document.body.removeChild(ta);
+}
+
+/* ---------- 批量操作 ---------- */
+let selSet=new Set();
+function updateBatchBar(){
+  const n=selSet.size;
+  const bar=$("batchBar");
+  bar.classList.toggle("show",n>0);
+  $("selCount").textContent=n;
+  $("tbody").querySelectorAll?$("tbody").querySelectorAll(".row-sel"):[];
+}
+function toggleSel(id,on){on?selSet.add(id):selSet.delete(id);render()}
+function toggleAll(on){
+  const list=filtered();
+  if(on)list.forEach(i=>selSet.add(i.id));
+  else list.forEach(i=>selSet.delete(i.id));
+  render();
+}
+function clearSel(){selSet.clear();render()}
+function batchDel(){
+  const n=selSet.size;if(!n)return;
+  if(!confirm(`确定删除选中的 ${n} 项吗?删除后可通过「撤销」恢复。`))return;
+  snapshot();
+  items=items.filter(i=>!selSet.has(i.id));
+  logAct("del",`批量删除 ${n} 项`);
+  selSet.clear();save();render();toast(`已批量删除 ${n} 项(可撤销)`);
+}
+function batchLoc(){
+  const n=selSet.size;if(!n)return;
+  const v=prompt(`为选中的 ${n} 项设置存放位置(如 A-2):`);
+  if(v==null||!v.trim())return;
+  snapshot();
+  items.forEach(i=>{if(selSet.has(i.id)){i.loc=v.trim();i.updated=now()}});
+  logAct("edit",`批量改位置 → ${v.trim()}(${n} 项)`);
+  selSet.clear();save();render();toast(`已更新 ${n} 项位置(可撤销)`);
+}
+function batchCat(){
+  const n=selSet.size;if(!n)return;
+  const v=prompt(`为选中的 ${n} 项设置类别(如 电阻 / IC):`);
+  if(v==null||!v.trim())return;
+  snapshot();
+  items.forEach(i=>{if(selSet.has(i.id)){i.category=v.trim();i.updated=now()}});
+  logAct("edit",`批量改类别 → ${v.trim()}(${n} 项)`);
+  selSet.clear();save();render();toast(`已更新 ${n} 项类别(可撤销)`);
+}
+function qtyPrompt(id){
+  const it=items.find(x=>x.id===id);if(!it)return;
+  const v=prompt(`「${it.mpn}」当前 ${it.qty} 件\n输入调整:如 +20 入库、-5 领用,或直接输入新数量:`);
+  if(v==null)return;
+  const s=v.trim();
+  let nv=null,diff=0;
+  if(/^[+-]\d+$/.test(s)){diff=parseInt(s,10);nv=it.qty+diff}
+  else if(/^\d+$/.test(s)){nv=parseInt(s,10);diff=nv-it.qty}
+  else{toast("格式:如 +20 / -5 / 100","warn");return}
+  if(nv<0){toast("数量不能为负","warn");return}
+  if(nv===it.qty){toast("数量未变化");return}
+  snapshot();
+  it.qty=nv;it.updated=now();
+  logAct(diff>0?"in":"out",it.mpn,Math.abs(diff));
+  save();render();bumpQty(id);
+  toast(nv>0&&nv<=it.th?`「${it.mpn}」预警:剩余 ${nv} 件`:`「${it.mpn}」数量已更新为 ${nv}`,nv===0?"warn":"");
+}
+function dblEdit(e,id){
+  const t=e.target;
+  if(t&&(t.closest?t.closest("button,input,select,a"):false))return;
+  openEdit(id);
+}
+function jumpLow(){
+  const cur=$("fStatus").value;
+  $("fStatus").value=cur==="warn"?"out":cur==="out"?"":"warn";
+  $("q").value="";
+  render();
+  toast("已筛选"+({warn:"预警",out:"缺货","":"全部"})[$("fStatus").value]+"器件");
+}
+function clearFilters(){
+  $("q").value="";$("fCat").value="";$("fPkg").value="";$("fStatus").value="";
+  render();toast("已清除全部筛选");
+}
+function hideGuide(){localStorage.setItem("lcsc-guide-dismiss","1");$("guide").classList.remove("show")}
+
+/* ---------- 立创商城对齐(类别英译中 + 封装规范化) ---------- */
+const LCSC_CAT={
+  "resistors":"电阻","resistor":"电阻","chip resistor":"电阻","resistor networks":"电阻","potentiometers":"电阻","trimmer":"电阻",
+  "capacitors":"电容","capacitor":"电容","ceramic capacitor":"电容","tantalum capacitor":"电容","aluminum electrolytic":"电容","film capacitors":"电容",
+  "inductors":"电感","inductor":"电感","transformers":"电感",
+  "integrated circuits":"IC","integrated circuit":"IC","ic":"IC","voltage regulator":"IC","voltage regulators":"IC","microcontrollers (mcu)":"IC","microcontroller":"IC","op-amps":"IC","operational amplifiers":"IC","memories":"IC","clock & timing":"IC","power management":"IC","amplifier":"IC","drivers":"IC","audio ics":"IC","logic":"IC","interface":"IC",
+  "diodes":"二极管","diode":"二极管","rectifier":"二极管","schottky diode":"二极管","zener diode":"二极管","led":"LED","leds":"LED","light emitting diodes":"LED",
+  "transistors":"三极管","transistor":"三极管","bipolar transistors":"三极管","mosfets":"MOSFET","mosfet":"MOSFET","power transistors":"三极管",
+  "connectors":"连接器","connector":"连接器","cables":"连接器","terminals":"连接器","wire":"连接器",
+  "crystals/oscillators":"晶体/振荡器","crystal":"晶体/振荡器","crystal oscillator":"晶体/振荡器","oscillators":"晶体/振荡器","resonators":"晶体/振荡器",
+  "modules":"模块","module":"模块","wireless modules":"模块","rf modules":"模块",
+  "sensors":"传感器","sensor":"传感器","pressure sensors":"传感器","temperature sensors":"传感器",
+  "switches/buttons":"开关/按键","switches":"开关/按键","switch":"开关/按键","buttons":"开关/按键",
+  "relays":"其他","fuses":"其他","protectors":"其他","hardware":"其他","tools":"其他","others":"其他","other":"其他","electronic components":"其他"
+};
+function normCategory(c){
+  if(!c)return"";
+  const t=String(c).trim();
+  const low=t.toLowerCase().replace(/\s+/g," ");
+  if(LCSC_CAT[low])return LCSC_CAT[low];
+  return t;
+}
+function normPkg(fp){
+  if(!fp)return"";
+  let s=String(fp).trim().replace(/\s+/g,"").replace(/\([^)]*\)/g,"");
+  const m=s.match(/^([A-Za-z]{1,2})(\d{2,4})$/);
+  if(m&&/^[CRLDUJQYKS]$/i.test(m[1]))return m[2];
+  return s;
+}
+function normLcsc(v){const s=String(v==null?"":v).trim();return /^c\d+$/i.test(s)?s.toUpperCase():s}
+function enhanceMapping(head,rows){
+  mapping.forEach((m,i)=>{
+    const h=String(head[i]||"").toLowerCase();
+    if(/型号|名称|name|comment|model|品牌|brand|描述|desc|封装|footprint|数量|quantity|单价|价格|price|备注|note|类别|category|位置|location/.test(h))return;
+    let c=0,total=0;
+    for(let r=0;r<Math.min(rows.length,20);r++){
+      const v=String(rows[r][i]||"").trim();
+      if(!v)continue;
+      total++;
+      if(/^C\d{3,}$/i.test(v))c++;
+    }
+    if(total>=1&&c/total>=0.8)m.field="lcsc";
+  });
+}
+function autoSizeSelect(sel){
+  if(!sel||!sel.options)return;
+  let w=0;
+  for(let i=0;i<sel.options.length;i++)w=Math.max(w,sel.options[i].text.length);
+  sel.style.width=Math.min(Math.max(w*13+36,104),360)+"px";
+}
+function openLcsc(id){
+  const it=items.find(x=>x.id===id);if(!it)return;
+  const k=it.lcsc||it.mpn;
+  try{window.open("https://so.szlcsc.com/global.html?k="+encodeURIComponent(k),"_blank","noopener")}catch(e){toast("无法打开立创商城","err")}
+}
+function fillPriceFromLcsc(){
+  const mpn=$("eMpn").value.trim(),lcsc=$("eLcsc").value.trim();
+  if(!mpn&&!lcsc){toast("请先填写型号或 LCSC 编号","warn");return}
+  const k=lcsc||mpn;
+  try{window.open("https://so.szlcsc.com/global.html?k="+encodeURIComponent(k),"_blank","noopener")}catch(e){}
+  const v=prompt(`已在立创商城打开「${mpn||k}」\n请查看价格梯度第一档(最小起订价)后输入单价(¥):`);
+  if(v==null)return;
+  const n=num(v,-1);
+  if(n<0){toast("单价格式不正确","warn");return}
+  $("ePrice").value=n;
+  toast("已填入单价 ¥"+n+"(保存后生效)","ok");
+}
+function openBatchPrice(){
+  if(!selSet.size){toast("请先勾选要查价的器件","warn");return}
+  window._priceIds=[...selSet];
+  renderPriceList();
+  openModal("priceMask");
+}
+function renderPriceList(){
+  $("priceList").innerHTML=window._priceIds.map(id=>{
+    const it=items.find(x=>x.id===id);if(!it)return"";
+    return `<div class="log-row"><span style="font-weight:500">${esc(it.mpn)}</span>${it.lcsc?`<span style="font-family:ui-monospace,monospace;font-size:11px;color:var(--muted)">${esc(it.lcsc)}</span>`:""}
+      <button class="mini" onclick="openLcsc('${id}')" style="margin-left:0">打开立创</button>
+      <span style="color:var(--muted);font-size:11px">¥</span><input id="pr_${id}" value="${it.price||""}" placeholder="最小起订价" style="width:110px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 8px;font-size:12px">
+      <span class="log-t">现:${it.price>0?"¥"+it.price:"未填"}</span></div>`;
+  }).join("")||"<div class='empty' style='padding:20px'>没有可查价的器件</div>";
+}
+function batchPriceSave(){
+  if(!window._priceIds||!window._priceIds.length)return;
+  snapshot();
+  let n=0;
+  window._priceIds.forEach(id=>{
+    const it=items.find(x=>x.id===id);if(!it)return;
+    const v=num($("pr_"+id).value,-1);
+    if(v>=0&&v!==it.price){it.price=v;it.updated=now();n++}
+  });
+  logAct("edit",`批量查价更新 ${n} 项`);
+  save();render();closeModal("priceMask");
+  toast(`已更新 ${n} 项单价(可撤销)`,"ok");
+}
+
+/* ---------- CSV import ---------- */
+function parseCSV(text){
+  let sep=",";
+  const nl=text.indexOf("\n");
+  const firstLine=text.slice(0,nl>-1?nl:text.length);
+  if(!firstLine.includes(",")&&firstLine.includes("\t"))sep="\t";
+  const rows=[];let row=[],cur="",inQ=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(inQ){
+      if(c==='"'){if(text[i+1]==='"'){cur+='"';i++}else inQ=false}
+      else cur+=c;
+    }else{
+      if(c==='"')inQ=true;
+      else if(c===sep){row.push(cur);cur=""}
+      else if(c==="\n"||c==="\r"){
+        if(c==="\r"&&text[i+1]==="\n")i++;
+        row.push(cur);cur="";
+        if(row.some(x=>x.trim()!==""))rows.push(row);
+        row=[];
+      }else cur+=c;
+    }
+  }
+  if(cur!==""||row.length){row.push(cur);if(row.some(x=>x.trim()!==""))rows.push(row)}
+  return rows;
+}
+function guessField(header){
+  const h=String(header).trim().toLowerCase().replace(/\s+/g,"");
+  for(const k in ALIAS){
+    if(ALIAS[k].some(a=>String(a).toLowerCase().replace(/\s+/g,"")===h))return k;
+    if(ALIAS[k].some(a=>h.includes(String(a).toLowerCase().replace(/\s+/g,""))))return k;
+  }
+  return "";
+}
+function openImport(){openModal("impMask");$("impStep1").style.display="block";$("impStep2").style.display="none"}
+function resetImport(){rawRows=[];mapping=[];$("file").value="";$("pasteArea").value="";$("impStep1").style.display="block";$("impStep2").style.display="none"}
+function backImport(){$("impStep1").style.display="block";$("impStep2").style.display="none"}
+function handleRows(rows){
+  if(rows.length<2){toast("未识别到数据行,请确认 CSV 格式");return}
+  const head=rows[0];
+  mapping=head.map(h=>({header:h,field:guessField(h)}));
+  enhanceMapping(head,rows.slice(1));
+  rawRows=rows.slice(1).filter(r=>r.some(c=>String(c).trim()!==""));
+  $("impRows").textContent=rawRows.length;
+  renderMap();renderPrev();
+  $("impStep1").style.display="none";
+  $("impStep2").style.display="block";
+}
+const drop=$("drop"),file=$("file");
+drop.onclick=()=>file.click();
+drop.ondragover=e=>{e.preventDefault();drop.classList.add("over")};
+drop.ondragleave=()=>drop.classList.remove("over");
+drop.ondrop=e=>{e.preventDefault();drop.classList.remove("over");if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0])};
+file.onchange=()=>{if(file.files[0])handleFile(file.files[0])};
+function handleFile(f){
+  const r=new FileReader();
+  r.onload=()=>handleRows(parseCSV(r.result));
+  r.onerror=()=>toast("文件读取失败");
+  r.readAsText(f,"UTF-8");
+}
+function parsePaste(){
+  const v=$("pasteArea").value.trim();
+  if(!v){toast("请先粘贴 CSV 内容");return}
+  handleRows(parseCSV(v));
+}
+function renderMap(){
+  const opts=['<option value="">忽略</option>']+Object.keys(FIELD_NAMES).map(k=>`<option value="${k}">${FIELD_NAMES[k]}</option>`).join("");
+  $("mapTable").innerHTML=`<tr><th style="width:200px">CSV 表头</th><th>对应字段</th><th>示例值</th></tr>`+
+    mapping.map((m,i)=>`<tr>
+      <td style="font-weight:500">${esc(m.header)}</td>
+      <td><select onchange="mapping[${i}].field=this.value">${opts.replace(`value="${m.field}"`,`value="${m.field}" selected`)}</select></td>
+      <td style="color:var(--muted);font-size:12px">${esc(rawRows[0]?rawRows[0][i]:"")}</td>
+    </tr>`).join("");
+}
+function renderPrev(){
+  const rows=rawRows.slice(0,6);
+  const cols=Math.min(mapping.length,8);
+  $("impPrev").innerHTML=`<tr>${mapping.slice(0,cols).map(m=>`<th>${esc(m.header)}</th>`).join("")}</tr>`+
+    rows.map(r=>`<tr>${r.slice(0,cols).map(c=>`<td>${esc(c)}</td>`).join("")}</tr>`).join("");
+}
+function doImport(){
+  const mode=document.querySelector('input[name="mode"]:checked').value;
+  let added=0,merged=0,skipped=0;
+  const get=(row,f)=>{
+    const i=mapping.findIndex(m=>m.field===f);
+    if(i<0||!row[i])return"";
+    return String(row[i]).trim();
+  };
+  snapshot();
+  rawRows.forEach(row=>{
+    const mpn=get(row,"mpn");
+    if(!mpn){skipped++;return}
+    const item={
+      mpn,category:normCategory(get(row,"category"))||"其他",pkg:normPkg(get(row,"pkg")),val:get(row,"val"),
+      loc:get(row,"loc"),qty:Math.max(0,Math.round(num(get(row,"qty"),1))),
+      th:Math.max(0,Math.round(num(get(row,"th"),10))),lcsc:normLcsc(get(row,"lcsc")),
+      price:Math.max(0,num(get(row,"price"),0)),note:get(row,"note"),updated:now()
+    };
+    if(mode==="merge"){
+      const hit=items.find(x=>x.mpn.toLowerCase()===mpn.toLowerCase()&&(x.pkg||"")===(item.pkg||""));
+      if(hit){hit.qty=(hit.qty||0)+item.qty;if(item.loc)hit.loc=item.loc;if(!hit.lcsc)hit.lcsc=item.lcsc;hit.updated=now();merged++;return}
+    }
+    item.id=Date.now()+"-"+Math.random().toString(36).slice(2,7);
+    items.push(item);added++;
+  });
+  logAct("imp",`新增 ${added} · 合并 ${merged} · 跳过 ${skipped}`);
+  save();render();closeModal("impMask");
+  const noPrice=items.filter(i=>!i.price).length;
+  toast(`导入完成:新增 ${added} 项,合并 ${merged} 项,跳过 ${skipped} 项`+(noPrice?`;${noPrice} 项未填单价,可「立创查价」填写最小起订价`:""));
+}
+function exportCSV(viewOnly){
+  const list=viewOnly?filtered():items;
+  if(!list.length){toast(viewOnly?"当前视图无数据可导出":"暂无数据可导出");return}
+  const head=["型号/名称","类别","封装","参数","数量","位置","阈值","LCSC编号","单价","备注"];
+  const rows=[head,...list.map(i=>[i.mpn,i.category,i.pkg,i.val,i.qty,i.loc,i.th,i.lcsc,i.price,i.note].map(v=>`"${String(v==null?"":v).replace(/"/g,'""')}"`))];
+  const blob=new Blob(["\ufeff"+rows.map(r=>r.join(",")).join("\r\n")],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=(viewOnly?"元器件库存_当前视图_":"元器件库存_")+new Date().toISOString().slice(0,10)+".csv";
+  a.click();URL.revokeObjectURL(a.href);
+  toast("已导出 CSV("+(viewOnly?list.length+" 条当前视图":"全部 "+list.length+" 条")+",UTF-8)");
+}
+function dlTemplate(){
+  const head=["型号/名称","类别","封装","参数","数量","位置","阈值","LCSC编号","单价","备注"];
+  const ex=["10KΩ 0603 1%","电阻","0603","10kΩ ±1%","200","R-1","50","C25804","0.008","常用阻值"];
+  const blob=new Blob(["\ufeff"+[head,ex].map(r=>r.join(",")).join("\r\n")],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="元器件库存_导入模板.csv";
+  a.click();URL.revokeObjectURL(a.href);
+  toast("已下载 CSV 模板");
+}
+
+/* ---------- BOM 智能匹配 ---------- */
+function bomCols(head){
+  const map={};
+  head.forEach((h,i)=>{
+    const key=String(h).trim().toLowerCase().replace(/\s+/g,"");
+    for(const k in BOM_ALIAS){
+      if(map[k]!==undefined)continue;
+      if(BOM_ALIAS[k].some(a=>String(a).toLowerCase().replace(/\s+/g,"")===key)||BOM_ALIAS[k].some(a=>key.includes(String(a).toLowerCase().replace(/\s+/g,""))))map[k]=i;
+    }
+  });
+  return map;
+}
+function parseBomRows(rows){
+  const head=rows[0],cols=bomCols(head);
+  const out=[];
+  rows.slice(1).forEach(r=>{
+    if(!r.some(c=>String(c).trim()!==""))return;
+    const get=k=>cols[k]!==undefined?(r[cols[k]]||"").trim():"";
+    const qty=Math.max(0,Math.round(num(get("qty"),1)));
+    if(!get("comment")&&!get("mpn")&&!get("lcsc"))return;
+    out.push({designator:get("designator"),comment:get("comment"),footprint:normPkg(get("footprint")),qty,
+      value:get("value")||get("comment"),category:normCategory(get("category")),desc:get("desc"),lcsc:normLcsc(get("lcsc")),mpn:get("mpn")});
+  });
+  return out;
+}
+function matchBom(b){
+  const cands=[];
+  const push=(it,score,how)=>{if(!cands.find(c=>c.it.id===it.id)||cands.find(c=>c.it.id===it.id).score<score)cands.push({it,score,how})};
+  if(b.lcsc){
+    const hit=items.find(i=>i.lcsc&&i.lcsc.toLowerCase()===b.lcsc.toLowerCase());
+    if(hit)push(hit,1.0,"LCSC 料号");
+  }
+  const mpnRaw=(b.mpn||b.comment||"").trim();
+  if(mpnRaw){
+    let hit=items.find(i=>i.mpn.toLowerCase()===mpnRaw.toLowerCase());
+    if(hit)push(hit,0.95,"厂商型号");
+    else{
+      hit=items.find(i=>mpnRaw.toLowerCase().includes(i.mpn.toLowerCase())||i.mpn.toLowerCase().includes(mpnRaw.toLowerCase()));
+      if(hit)push(hit,0.85,"名称包含");
+    }
+  }
+  const vTok=String(b.value||"").split(/[^0-9a-zμΩ.]+/i).map(t=>normValue(t)).filter(n=>n&&n.base);
+  const qn=vTok[0]||null;
+  if(qn){
+    items.forEach(i=>{
+      if(itemNorms(i).some(n=>normEq(n,qn))){
+        const pf=normPkg(b.footprint),pi=normPkg(i.pkg);
+        const pkgOk=pf&&pi&&(pf.includes(pi)||pi.includes(pf));
+        push(i,pkgOk?0.9:0.8,pkgOk?"参数+封装":"参数匹配");
+      }
+    });
+  }
+  if(!cands.length&&b.category){
+    const hit=items.find(i=>i.category===b.category);
+    if(hit)push(hit,0.35,"类别兜底");
+  }
+  cands.sort((x,y)=>y.score-x.score);
+  return {bom:b,cands,ok:!!cands.length&&cands[0].score>=0.7};
+}
+function parseBom(){
+  const text=$("bomText").value.trim();
+  let rows=null;
+  if(text)rows=parseCSV(text);
+  else if($("bomFile").files[0]){
+    const f=$("bomFile").files[0];
+    const r=new FileReader();
+    r.onload=()=>{runBom(parseCSV(r.result))};
+    r.onerror=()=>toast("文件读取失败");
+    r.readAsText(f,"UTF-8");return;
+  }else{toast("请先粘贴 BOM 或选择文件");return}
+  runBom(rows);
+}
+function runBom(rows){
+  if(rows.length<2){toast("未识别到 BOM 数据行");return}
+  const list=parseBomRows(rows);
+  if(!list.length){toast("未能从表头识别 BOM 列(需要 Comment/数量 等)");return}
+  const res=list.map(matchBom);
+  const nOk=res.filter(r=>r.cands.length&&r.cands[0].score>=0.95).length;
+  const nParam=res.filter(r=>r.cands.length&&r.cands[0].score>=0.7&&r.cands[0].score<0.95).length;
+  const nLow=res.filter(r=>!r.cands.length).length;
+  const nShort=res.filter(r=>r.cands.length&&r.cands[0].score>=0.7&&r.cands[0].it.qty<r.bom.qty).length;
+  $("bomRes").innerHTML=
+    `<div class="bom-summary">
+      <div class="bs">共 <b>${list.length}</b> 条</div>
+      <div class="bs g">精确匹配 <b>${nOk}</b></div>
+      <div class="bs a">参数匹配 <b>${nParam}</b></div>
+      <div class="bs a">库存不足 <b>${nShort}</b></div>
+      <div class="bs r">未匹配(缺料) <b>${nLow}</b></div>
+    </div>
+    <div class="table-wrap" style="max-height:320px">
+    <table class="bom-tbl">
+      <thead><tr><th>位号</th><th>器件</th><th>封装</th><th>数量</th><th>匹配结果</th><th>库存余量</th><th>状态</th></tr></thead>
+      <tbody>${res.map(r=>{
+        const b=r.bom,best=r.cands[0];
+        const matched=best&&best.score>=0.7;
+        const status=!matched?'<span class="badge red">缺料</span>':best.it.qty>=b.qty?'<span class="badge green">充足</span>':'<span class="badge amber">不足</span>';
+        const matchCell=matched?`<td><span class="mpn" style="cursor:pointer" onclick="setQ('${esc(best.it.mpn)}')" title="点击在库存中定位">${esc(best.it.mpn)}</span> <span style="color:var(--muted);font-size:11px">${Math.round(best.score*100)}%·${best.how}</span></td><td>${best.it.qty}</td>`:
+          `<td style="color:var(--muted)">—</td><td>—</td>`;
+        return `<tr class="${!matched?"low":""}">
+          <td style="font-family:ui-monospace,monospace;font-size:12px">${esc(b.designator)||"—"}</td>
+          <td>${esc(b.comment||b.mpn)}</td>
+          <td>${esc(b.footprint)||"—"}</td>
+          <td>${b.qty}</td>${matchCell}<td>${status}</td></tr>`;
+      }).join("")}</tbody></table></div>
+    <div class="note">匹配优先级:LCSC 料号 → 厂商型号 → 参数归一化 → 名称包含 → 类别兜底。点击匹配型号可在主列表定位。</div>`;
+  logAct("imp",`BOM 核对:共 ${list.length} 条,缺料 ${nLow},不足 ${nShort}`);
+}
+function setQ(mpn){$("q").value=mpn;render();closeModal("bomMask")}
+function demoBom(){
+  $("bomText").value="Comment,Footprint,Designator,Value,Quantity,Primary Category,Secondary Category,Description,Supplier Part,Manufacturer Part\n"+
+    "10KΩ 0603 1%,0603,R1,\"10kΩ ±1%\",5,Resistor,Chip Resistor,\"容值:10kΩ;精度:±1%\",C25804,\"\"\n"+
+    "AMS1117-3.3,SOT-223,U1,3.3V,3,Integrated Circuits,Voltage Regulator,LDO 3.3V,C6186,AMS1117-3.3\n"+
+    "STM32F103C8T6,LQFP-48,U2,ARM,2,Integrated Circuits,MCU,Cortex-M3,C8733,STM32F103C8T6\n"+
+    "ESP32-S3-WROOM-1,Module,U3,WiFi,1,Modules,Wireless,WiFi/BLE MCU,C2913206,ESP32-S3-WROOM-1\n"+
+    "100nF 0603,0603,C1,\"100nF 50V\",10,Capacitor,Ceramic,\"容值:100nF;耐压:50V\",C14663,\"\"\n"+
+    "1N4007,DO-41,D1,1N4007,4,Diodes,Rectifier,1A 1000V,C728822,1N4007";
+  $("bomText").scrollIntoView({behavior:"smooth",block:"center"});
+  toast("已填入示例 BOM,点「解析并匹配」");
+}
+const bomDrop=$("bomDrop"),bomFile=$("bomFile");
+bomDrop.onclick=()=>bomFile.click();
+bomDrop.ondragover=e=>{e.preventDefault();bomDrop.classList.add("over")};
+bomDrop.ondragleave=()=>bomDrop.classList.remove("over");
+bomDrop.ondrop=e=>{e.preventDefault();bomDrop.classList.remove("over");if(e.dataTransfer.files[0]){const f=e.dataTransfer.files[0];const r=new FileReader();r.onload=()=>{runBom(parseCSV(r.result))};r.readAsText(f,"UTF-8")}};
+function openBom(){$("bomText").value=$("bomText").value||"";openModal("bomMask")}
+
+/* ---------- 统计看板(SVG) ---------- */
+function pieSVG(data,total){
+  const cx=100,cy=100,r=82;
+  let a=-Math.PI/2,paths="";
+  data.forEach((d,i)=>{
+    if(d.value<=0)return;
+    const ang=d.value/total*2*Math.PI;
+    const x1=cx+r*Math.cos(a),y1=cy+r*Math.sin(a),x2=cx+r*Math.cos(a+ang),y2=cy+r*Math.sin(a+ang);
+    const large=ang>Math.PI?1:0;
+    paths+=`<path d="M${cx} ${cy} L${x1.toFixed(1)} ${y1.toFixed(1)} A${r} ${r} 0 ${large} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} Z" fill="${PALETTE[i%PALETTE.length]}" stroke="var(--panel2)" stroke-width="1"/>`;
+    a+=ang;
+  });
+  return `<svg viewBox="0 0 200 200" width="200" height="200" style="flex-shrink:0">${paths}<text x="100" y="103" text-anchor="middle" font-size="12" fill="var(--muted)">共 ${total} 种</text></svg>`;
+}
+function barSVG(data){
+  if(!data.length)return `<div class="empty" style="padding:20px">暂无数据</div>`;
+  const max=Math.max(...data.map(d=>d.value),1);
+  const rowH=Math.min(30,Math.max(16,Math.floor(220/data.length)));
+  const h=Math.max(120,data.length*rowH+16),w=320;
+  let rows="";
+  data.forEach((d,i)=>{
+    const y=12+i*rowH;
+    const bw=Math.max(d.value>0?2:0,d.value/max*(w-86));
+    rows+=`<text x="2" y="${y+rowH/2+3}" font-size="11" fill="var(--muted)" text-anchor="start">${esc(d.name.length>8?d.name.slice(0,8)+"…":d.name)}</text>
+      <rect x="86" y="${y+2}" width="${bw}" height="${rowH-6}" rx="3" fill="${PALETTE[i%PALETTE.length]}" opacity="0.85"/>
+      <text x="${86+bw+4}" y="${y+rowH/2+3}" font-size="11" fill="var(--text)">${d.value}</text>`;
+  });
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="max-width:320px">${rows}</svg>`;
+}
+function flowBars(){
+  const days=[],nowT=Date.now();
+  for(let i=6;i>=0;i--){
+    const d=new Date(nowT-i*86400000);
+    days.push({key:`${d.getMonth()+1}/${d.getDate()}`,t0:new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime(),in:0,out:0});
+  }
+  logs.forEach(l=>{
+    if(l.a!=="in"&&l.a!=="out")return;
+    const day=days.find(d=>l.t>=d.t0&&l.t<d.t0+86400000);
+    if(day)day[l.a==="in"?"in":"out"]+=(l.n||1);
+  });
+  const max=Math.max(...days.map(d=>Math.max(d.in,d.out)),1);
+  const w=380,h=180;
+  let rows="";
+  const bw=(w-60)/7;
+  days.forEach((d,i)=>{
+    const x=44+i*bw;
+    const hi=d.in/max*110,ho=d.out/max*110;
+    rows+=`<text x="${x+bw/2}" y="142" text-anchor="middle" font-size="10" fill="var(--muted)">${d.key}</text>
+      <rect x="${x+2}" y="${130-hi}" width="${bw/2-3}" height="${hi}" fill="var(--green)" opacity="0.85"/>
+      <rect x="${x+bw/2+1}" y="${130-ho}" width="${bw/2-3}" height="${ho}" fill="var(--amber)" opacity="0.85"/>`;
+  });
+  rows+=`<text x="4" y="22" font-size="10" fill="var(--green)">入库</text><text x="4" y="38" font-size="10" fill="var(--amber)">领用</text>`;
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="max-width:380px">${rows}</svg>`;
+}
+function openStat(){
+  const cats=allCats();
+  const byCat=cats.map(c=>({name:c,count:items.filter(i=>(i.category||"其他")===c).length,qty:items.filter(i=>(i.category||"其他")===c).reduce((s,i)=>s+(i.qty||0),0)})).filter(d=>d.count>0);
+  const total=byCat.reduce((s,d)=>s+d.count,0);
+  const legend=byCat.map((d,i)=>`<span style="background:${PALETTE[i%PALETTE.length]}"></span>${esc(d.name)} ${d.count} 种`).join(" ");
+  const qtyData=byCat.slice(0,10).map(d=>({name:d.name,value:d.qty})).filter(d=>d.value>0);
+  $("statBody").innerHTML=
+    `<div class="stat-flex">
+      <div class="stat-card"><h3>分类分布(种类)</h3><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${pieSVG(byCat,total)}<div class="legend">${legend}</div></div></div>
+      <div class="stat-card"><h3>各分类总数量(件)</h3>${barSVG(qtyData)}</div>
+      <div class="stat-card" style="min-width:100%"><h3>近 7 天出入库次数</h3>${flowBars()}</div>
+    </div>`;
+  openModal("statMask");
+}
+
+/* ---------- 文件存储层(HTML 同目录 data/ 文件夹,File System Access API) ---------- */
+const FS=(()=>{
+  const supported=typeof window!=="undefined"&&!!window.showDirectoryHandle&&!!window.indexedDB;
+  let dirHandle=null;
+  let mode=localStorage.getItem("lcsc-fs-mode")==="file"?"file":"local";
+  const IDB="lcsc-fs-db";
+  function idbGet(){
+    return new Promise(res=>{
+      try{
+        const rq=indexedDB.open(IDB,1);
+        rq.onupgradeneeded=()=>{try{rq.result.createObjectStore("h")}catch(e){}};
+        rq.onsuccess=()=>res(rq.result);
+        rq.onerror=()=>res(null);
+      }catch(e){res(null)}
+    });
+  }
+  async function saveHandle(h){const db=await idbGet();if(!db)return;try{db.transaction("h","readwrite").objectStore("h").put(h,"dir")}catch(e){}}
+  async function getHandle(){const db=await idbGet();if(!db)return null;return new Promise(res=>{try{const r=db.transaction("h").objectStore("h").get("dir");r.onsuccess=()=>res(r.result||null);r.onerror=()=>res(null)}catch(e){res(null)}})}
+  async function connect(explicit){
+    if(!supported)return{ok:false,reason:"unsupported"};
+    if(!explicit){
+      const h=await getHandle();
+      if(h){
+        try{if((await h.queryPermission({mode:"readwrite"}))==="granted"){dirHandle=h;mode="file";localStorage.setItem("lcsc-fs-mode","file");return{ok:true}}}catch(e){}
+      }
+      return{ok:false,reason:"need-select"};
+    }
+    try{
+      const h=await window.showDirectoryHandle({mode:"readwrite"});
+      dirHandle=h;mode="file";localStorage.setItem("lcsc-fs-mode","file");
+      try{await saveHandle(h)}catch(e){}
+      return{ok:true};
+    }catch(e){return{ok:false,reason:"denied"}}
+  }
+  async function readFile(name){
+    if(mode!=="file"||!dirHandle)return null;
+    try{
+      const sub=await dirHandle.getDirectoryHandle("data",{create:true});
+      const fh=await sub.getFileHandle(name);
+      const f=await fh.getFile();
+      return await f.text();
+    }catch(e){return null}
+  }
+  async function writeFile(name,text){
+    if(mode!=="file"||!dirHandle)return false;
+    try{
+      const sub=await dirHandle.getDirectoryHandle("data",{create:true});
+      const fh=await sub.getFileHandle(name,{create:true});
+      const w=await fh.createWritable();
+      await w.write(text);await w.close();
+      return true;
+    }catch(e){return false}
+  }
+  return{supported,connect,readFile,writeFile,get mode(){return mode}};
+})();
+function normalizeItem(i){i.qty=Math.max(0,Math.round(Number(i.qty)||0));i.th=Math.max(0,Math.round(Number(i.th)||10));if(i.sub1===undefined)i.sub1="";if(i.sub2===undefined)i.sub2="";if(i.sub3===undefined)i.sub3=""}
+async function initFS(){
+  if(!FS.supported)return;
+  const r=await FS.connect(false);
+  if(r.ok)await loadFromFS();
+  else updateStoreUI();
+}
+async function loadFromFS(){
+  try{
+    const c=await FS.readFile("components.json");
+    if(c!=null&&c.trim()){const d=JSON.parse(c);if(Array.isArray(d))items=d}
+    const s=await FS.readFile("settings.json");
+    if(s!=null&&s.trim()){const d=JSON.parse(s);Object.assign(settings,d);settings.columns=Object.assign({},settings.columns,(d.columns||{}));settings.prefixes=Object.assign({},DEF_PRE,(d.prefixes||{}))}
+    const l=await FS.readFile("logs.json");
+    if(l!=null&&l.trim()){const d=JSON.parse(l);if(Array.isArray(d))logs=d}
+    items.forEach(normalizeItem);
+  }catch(e){}
+  updateStoreUI();render();
+}
+function updateStoreUI(){
+  $("saveState").textContent=FS.mode==="file"?"文件存储: HTML 同目录 data/":"存储:浏览器本地(可启用文件存储)";
+  document.querySelectorAll(".fsbtn").forEach(b=>{b.style.display=FS.mode==="file"?"none":"inline-flex"});
+}
+function runDiag(){
+  const ua=typeof navigator!=="undefined"?(navigator.userAgent||""):"";
+  const m=ua.match(/Edg\/([\d.]+)/)||ua.match(/Chrome\/([\d.]+)/)||ua.match(/Safari\/([\d.]+)/);
+  const loc=typeof location!=="undefined"?location:{protocol:"",host:""};
+  const hasFs=typeof window!=="undefined"&&!!window.showDirectoryHandle;
+  const hasIdb=typeof window!=="undefined"&&!!window.indexedDB;
+  const secure=typeof window!=="undefined"?String(window.isSecureContext):"n/a";
+  const lines=[
+    ["浏览器",ua?(m?"版本 "+m[1]:ua.slice(0,60)):"未知"],
+    ["访问地址",loc.protocol+"//"+loc.host+(loc.host?"":"(file:// 直接打开)")],
+    ["安全上下文(需 true)",secure],
+    ["文件系统 API",hasFs?"可用":"缺失(需 Chrome/Edge 87+)"],
+    ["IndexedDB",hasIdb?"可用":"缺失"],
+    ["当前存储模式",FS.mode==="file"?"文件存储(已启用)":"浏览器本地(未启用)"],
+    ["支持结论",hasFs&&hasIdb?(secure==="true"?"支持,可启用文件存储":"API 可用但非安全上下文,请用 http://localhost 访问"):"不支持:请用 Chrome/Edge 并通过 http 访问"]
+  ];
+  $("diagBody").innerHTML=lines.map(l=>`<div class="log-row"><span style="width:130px;color:var(--muted);flex-shrink:0">${l[0]}</span><span>${esc(l[1])}</span></div>`).join("");
+}
+async function enableFS(){
+  if(!FS.supported){
+    const hasFs=typeof window!=="undefined"&&!!window.showDirectoryHandle;
+    const hasIdb=typeof window!=="undefined"&&!!window.indexedDB;
+    toast(hasFs&&!hasIdb?"当前浏览器缺少 IndexedDB,无法持久化文件授权,请使用 Chrome / Edge":"当前浏览器不支持文件存储(需 Chrome / Edge),已自动使用浏览器本地存储,数据不丢失","err");
+    return;
+  }
+  const r=await FS.connect(true);
+  if(r.ok){
+    const c=await FS.readFile("components.json");
+    if(c!=null&&c.trim()){await loadFromFS();toast("已启用文件存储,并载入 data/ 中的数据","ok")}
+    else{save();updateStoreUI();toast("已启用:数据将保存到 HTML 同目录 data/ 文件夹","ok")}
+  }else{toast("未启用文件存储(仍使用浏览器本地,可随时重试)","warn");updateStoreUI()}
+}
+
+/* ---------- backup / restore ---------- */
+function exportBackup(){
+  if(!items.length&&!logs.length){toast("暂无数据可备份");return}
+  const data={v:3,ts:now(),items,logs:logs.slice(0,100)};
+  const blob=new Blob([JSON.stringify(data,null,1)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="元器件库存_备份_"+new Date().toISOString().slice(0,10)+".json";
+  a.click();URL.revokeObjectURL(a.href);
+  toast("已导出 JSON 备份");
+}
+function importBackup(input){
+  const f=input.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const d=JSON.parse(r.result);
+      if(!Array.isArray(d.items))throw 0;
+      if(!confirm(`导入备份将覆盖当前 ${items.length} 条数据,是否继续?(导入前会自动留一次可撤销快照)`))return;
+      snapshot();
+      items=d.items.map(i=>{if(!i.id)i.id=Date.now()+"-"+Math.random().toString(36).slice(2,7);if(!i.updated)i.updated=now();return i});
+      if(Array.isArray(d.logs))logs=d.logs.slice(0,200);
+      logAct("restore",`恢复 ${items.length} 条`);
+      save();saveLogs();render();
+      toast(`已恢复备份:${items.length} 条`);
+    }catch(e){toast("备份文件解析失败,请确认选择了正确的 JSON 文件")}
+  };
+  r.onerror=()=>toast("备份文件读取失败");
+  r.readAsText(f,"UTF-8");
+  input.value="";
+}
+
+/* ---------- logs & settings UI ---------- */
+function openLogs(){renderLogs();openModal("logMask")}
+function renderLogs(){
+  $("logList").innerHTML=logs.length?logs.map(l=>{
+    const [name,color]=ACT[l.a]||[l.a,"var(--muted)"];
+    return `<div class="log-row"><span style="color:${color};white-space:nowrap">${name}</span>${l.d?` <span>${esc(l.d)}</span>`:""}${l.n?` <b style="color:var(--amber)">×${l.n}</b>`:""}<span class="log-t">${fmtTime(l.t)}</span></div>`;
+  }).join(""):"<div class='empty' style='padding:30px'>暂无操作记录</div>";
+}
+function openSet(){renderSetPanel();openModal("setMask")}
+function renderSetPanel(){
+  $("setCols").innerHTML=COL_DEFS.map(c=>`<label class="chk"><input type="checkbox" ${settings.columns[c.k]?"checked":""} onchange="toggleCol('${c.k}',this.checked)">${c.t}</label>`).join("");
+  $("setPre").innerHTML=allCats().map(c=>`<label class="fg" style="gap:3px"><span style="font-size:11px;color:var(--muted)">${esc(c)}</span><input value="${esc(settings.prefixes[c]||"")}" onchange="setPre('${esc(c)}',this.value)" placeholder="前缀" style="padding:5px 8px"></label>`).join("");
+  document.querySelectorAll('input[name="density"]').forEach(r=>r.checked=r.value===settings.density);
+  document.querySelectorAll('input[name="theme"]').forEach(r=>r.checked=r.value===settings.theme);
+}
+function toggleCol(k,on){settings.columns[k]=on?1:0;saveSettings();render()}
+function setDensity(v){settings.density=v;saveSettings();applySettings()}
+function setTheme(v){settings.theme=v;saveSettings();applySettings()}
+function setPre(cat,v){settings.prefixes[cat]=v.trim();saveSettings()}
+
+/* ---------- 快捷键 ---------- */
+document.addEventListener("keydown",e=>{
+  const tag=(e.target.tagName||"").toLowerCase();
+  const inField=tag==="input"||tag==="textarea"||tag==="select"||e.target.isContentEditable;
+  if((e.ctrlKey||e.metaKey)&&!e.altKey){
+    const k=(e.key||"").toLowerCase();
+    if(k==="f"){e.preventDefault();$("q").focus();$("q").select()}
+    else if(k==="a"&&!inField){e.preventDefault();openEdit()}
+    else if(k==="b"&&!inField){e.preventDefault();openBom()}
+    else if(k==="z"&&!inField){e.preventDefault();undo()}
+  }
+  if(e.key==="Escape"){document.querySelectorAll(".modal-mask.show").forEach(m=>closeModal(m.id))}
+});
+
+/* ---------- demo ---------- */
+function seedDemo(){
+  if(items.length&&!confirm("当前已有数据,示例数据会追加进去,继续?"))return;
+  const d=[
+    ["AMS1117-3.3","IC","SOT-223","3.3V","LDO","","","35","B-3","10","C6186",0.35],
+    ["STM32F103C8T6","IC","LQFP-48","ARM","Cortex-M3","","","8","U-5","5","C8733",8.5],
+    ["10KΩ 0603 1%","电阻","0603","10kΩ","±1%","0.1W","","200","R-1","50","C25804",0.008],
+    ["1KΩ 0805 1%","电阻","0805","1kΩ","±1%","0.125W","","150","R-2","50","C17513",0.01],
+    ["100nF 0603 X7R","电容","0603","100nF","50V","±10%","","180","C-1","50","C14663",0.012],
+    ["10uF 0805 X5R","电容","0805","10uF","25V","±20%","","120","C-2","50","C15850",0.02],
+    ["SS34","二极管","SMA","40V","3A","肖特基","","12","D-1","10","C8678",0.11],
+    ["1N4148","二极管","DO-35","75V","0.3A","开关","","40","D-2","20","C81598",0.03],
+    ["S8050","三极管","SOT-23","NPN","0.5A","","","25","Q-1","10","C13915",0.05],
+    ["ESP32-S3-WROOM-1","模块","模组","WiFi/BLE","MCU","","","4","M-1","2","C2913206",18],
+    ["USB-C 16P 母座","连接器","SMD","Type-C","16P","","","20","J-1","10","C2765186",0.6],
+    ["2.54mm 排针 40P","连接器","直插","单排","40P","","","30","J-2","10","C20500",0.5],
+    ["8MHz 晶振","晶体/振荡器","3225","8MHz","20pF","","","9","Y-1","5","C9002",0.4],
+    ["AMS1117-5.0","IC","SOT-223","5.0V","LDO","","","0","U-3","10","C6187",0.35]
+  ];
+  snapshot();
+  d.forEach(r=>items.push({id:now()+"-"+Math.random().toString(36).slice(2,7),mpn:r[0],category:r[1],pkg:r[2],
+    val:[r[3],r[4],r[5],r[6]].filter(Boolean).join(" "),sub1:r[4],sub2:r[5],sub3:r[6],
+    qty:Math.max(0,Math.round(Number(r[7])||0)),loc:r[8],th:Math.max(0,Math.round(Number(r[9])||10)),lcsc:r[10],price:r[11],note:"",updated:now()-Math.floor(Math.random()*86400000)}));
+  logAct("imp","示例数据 14 条");
+  save();render();toast("已加入示例数据,可随意删除(可撤销)");
+}
+
+$("q").addEventListener("input",render);
+$("fCat").addEventListener("change",render);
+$("fPkg").addEventListener("change",render);
+$("fStatus").addEventListener("change",render);
+$("sort").addEventListener("change",render);
+load();loadSettings();loadLogs();applySettings();render();updateStoreUI();initFS();
+</script>
+</body>
+</html>
