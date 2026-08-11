@@ -185,6 +185,14 @@ mark{background:rgba(210,153,34,.4);color:inherit;border-radius:3px;padding:0 1p
 .pm-row.match-miss .pm-tag{color:var(--red)}
 .pm-row.match-empty .pm-tag{color:var(--amber)}
 .pm-note{font-size:11px;color:var(--muted);font-weight:400;margin-left:8px}
+/* 字段级匹配状态(7 核心字段:绿=已匹配 / 红=未匹配,红框旁下拉手动补充) */
+.fg input.match-ok,.fg select.match-ok,.fg textarea.match-ok{border-color:var(--green)!important;box-shadow:0 0 0 2px rgba(63,185,80,.15)}
+.fg input.match-miss,.fg select.match-miss,.fg textarea.match-miss{border-color:var(--red)!important;box-shadow:0 0 0 2px rgba(248,81,73,.15)}
+.match-sel{display:block;width:100%;margin-top:6px;padding:5px 8px;font-size:12px;background:var(--panel2);border:1px solid var(--border2);border-radius:7px;color:var(--text);outline:none;cursor:pointer}
+.match-sel:focus{border-color:var(--accent)}
+.match-status{display:block;font-size:11px;margin-top:4px;font-weight:500}
+.match-status.ok{color:var(--green)}
+.match-status.miss{color:var(--red)}
 .clickable{cursor:pointer;transition:border-color .15s}
 .clickable:hover{border-color:var(--accent)}
 .stat .v.sub{font-size:12px;color:var(--muted);font-weight:400;margin-top:2px}
@@ -282,6 +290,7 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
   <div class="modal">
     <h2><span id="editTitle">添加器件</span><button class="close" onclick="closeModal('editMask')">✕</button></h2>
     <form id="editForm" onsubmit="saveItem(event)">
+      <div id="matchTip" class="match-status" style="display:none;background:rgba(88,166,255,.08);border:1px dashed var(--accent);border-radius:8px;padding:8px 12px;margin-bottom:12px"></div>
       <div class="form-grid">
         <div class="fg full"><label>型号 / 名称 <em>*</em></label><input id="eMpn" required oninput="this.classList.remove('err')" placeholder="如:AMS1117-3.3 或 10K 贴片电阻"></div>
         <div class="fg"><label>类别</label><input id="eCat" list="catList" onchange="onCatChange();this.classList.add('user-cat')" placeholder="选择或输入新类别…"></div>
@@ -969,6 +978,8 @@ function parseFillCode(s){
 }
 function stripTags(s){return String(s==null?"":s).replace(/<[^>]*>/g,"").replace(/&nbsp;/g," ").trim()}
 function extractParamsFromHtml(html){
+  /* 立创详情页「商品参数」表格为三列:属性|参数|值。
+     首行属性列=「商品目录」,其值在第二列;其余行 参数=第2列,值=第3列(可能为空)。 */
   const params=[];
   const src=String(html||"");
   let start=src.indexOf("商品参数");
@@ -985,29 +996,79 @@ function extractParamsFromHtml(html){
     let tm;
     while((tm=tdRe.exec(m[1])))tds.push(stripTags(tm[1]));
     if(tds.length<2)continue;
-    const name=tds.length>=3?tds[1]:tds[0];
-    const value=tds.length>=3?tds[2]:tds[1];
-    if(!name)continue;
-    if(/^(属性|参数|值)$/.test(name)||/^属性参数/.test(name))continue;
-    params.push({name,value});
+    const a=String(tds[0]||"").trim(),n=String(tds[1]||"").trim(),v=String(tds[2]==null?"":tds[2]).trim();
+    if(/^(属性|参数|值)$/.test(a)||/^属性参数/.test(a)||/^属性参数值/.test(n))continue;
+    if(/^商品目录$/.test(a)){params.push({name:"商品目录",value:n});continue}
+    if(!n&&!v)continue;
+    params.push({name:n||a,value:v});
   }
   return params;
 }
+function cleanVal(v){return String(v==null?"":v).replace(/[（(][^）)]*[)）]/g,"").trim()}
+function hasVal(v){const s=String(v==null?"":v).trim();return s!==""&&s!=="-"&&s!=="—"&&s!=="无"&&s!=="null"}
+function buildMainVal(params,category){
+  /* 参数值串:优先取常见关键参数(输出电压/输出电流/最大输入电压等)的值拼接;
+     否则回退为参数表非空值的前 3 项。 */
+  if(!params||!params.length)return"";
+  const order=[["输出电压","输出电流","最大输入电压"],["输入电压","输出电流","输出功率"],["工作电压","工作频率","容量"],["额定电压","额定电流","功率"]];
+  for(const grp of order){
+    const items=grp.map(n=>params.find(p=>p.name.includes(n)&&hasVal(p.value))).filter(Boolean);
+    if(items.length>=2)return items.map(p=>cleanVal(p.value)).join(" ");
+  }
+  const vals=params.filter(p=>p.name!=="商品目录"&&hasVal(p.value)).map(p=>cleanVal(p.value));
+  return vals.slice(0,3).join(" ");
+}
+function buildNote(src){
+  /* 备注 = 品牌 + 商品概述 + 商品特性 */
+  const parts=[];
+  let br=src.match(/品牌名称[\s\S]{0,120}?<a[^>]*>([^<]{1,40})<\/a>/i);
+  if(!br)br=src.match(/品牌名称[\s\S]{0,120}?([A-Za-z\u4e00-\u9fa5][^<>\n]{0,40})/);
+  if(br){const b=stripTags(br[1]).replace(/^[：:\s]+/,"");if(b)parts.push("品牌: "+b)}
+  const ov=src.match(/商品概述[\s\S]{0,40}?([^<]{10,800})/);
+  if(ov){let t=stripTags(ov[1]).replace(/\s+/g," ").trim();const cut=t.indexOf("商品特性");if(cut>=0)t=t.slice(0,cut).trim();if(t)parts.push("商品概述: "+t)}
+  const st=src.indexOf("商品特性");
+  if(st>=0){
+    const ends=[src.indexOf("数据手册",st),src.indexOf("最新价格",st),src.length].filter(x=>x>=0);
+    const seg=src.slice(st,Math.min.apply(null,ends));
+    const items=(seg.match(/<li[^>]*>([\s\S]*?)<\/li>/gi)||[]).map(x=>stripTags(x)).filter(Boolean);
+    if(items.length)parts.push("商品特性: "+items.join("; "));
+    else{const t=stripTags(seg.replace("商品特性","")).replace(/\s+/g," ").trim();if(t)parts.push("商品特性: "+t)}
+  }
+  return parts.join("\n");
+}
 function extractMetaFromHtml(html){
-  const out={title:"",lcsc:"",pkg:"",brand:"",price:0};
+  /* 精确提取 7 个核心字段:型号/类别/封装/参数/LCSC编号/单价/备注 */
+  const out={mpn:"",lcsc:"",pkg:"",category:"",val:"",price:0,note:"",brand:"",raw:[]};
   const src=String(html||"");
-  let t=src.match(/商品型号[^<>\n]{0,80}?([A-Za-z0-9][^<>\n]{1,40})/);
+  /* 1) 型号:商品型号优先(保留完整型号,不按 - 截断),h1 回退,title 兜底 */
+  let t=src.match(/商品型号[\s\S]{0,80}?([^<>\n]{1,60})/);
   if(!t){const h=src.match(/<h1[^>]*>([^<]+)<\/h1>/i);if(h)t=[null,h[1]]}
-  if(!t){const ti=src.match(/<title>([\s\S]*?)<\/title>/i);if(ti)t=[null,ti[1].split("_")[0].split("\n")[0]]}
-  if(t)out.title=stripTags(t[1]).trim();
-  const lc=src.match(/C\d{5,}/);
-  if(lc)out.lcsc=lc[0];
+  if(!t){const ti=src.match(/<title>([\s\S]*?)<\/title>/i);if(ti)t=[null,ti[1].split("_")[0].split("中文资料")[0].split("|")[0]]}
+  if(t){out.mpn=stripTags(t[1]).replace(/^[：:\s]+/,"").trim()}
+  /* 2) LCSC 编号:商品编号标签优先,再按 C+数字 兜底 */
+  const ln=src.match(/商品编号[\s\S]{0,80}?([A-Za-z]{0,2}\d{5,})/);
+  if(ln)out.lcsc=normLcsc(ln[1]);
+  else{const lc=src.match(/C\d{5,}/);if(lc)out.lcsc=lc[0]}
+  /* 3) 封装(规范化) */
   const pk=src.match(/商品封装[\s\S]{0,120}?([^<>\n]{1,40})/);
-  if(pk)out.pkg=stripTags(pk[1]).replace(/^[：:\s]+/,"");
-  const br=src.match(/品牌名称[\s\S]{0,120}?([^<>\n]{1,40})/);
+  if(pk)out.pkg=normPkg(stripTags(pk[1]).replace(/^[：:\s]+/,""));
+  /* 4) 品牌 */
+  let br=src.match(/品牌名称[\s\S]{0,120}?<a[^>]*>([^<]{1,40})<\/a>/i);
+  if(!br)br=src.match(/品牌名称[\s\S]{0,120}?([A-Za-z\u4e00-\u9fa5][^<>\n]{0,40})/);
   if(br)out.brand=stripTags(br[1]).replace(/^[：:\s]+/,"");
-  const pr=src.match(/(\d{1,6})\+\s*￥([\d.]+)/);
-  if(pr)out.price=parseFloat(pr[2])||0;
+  /* 5) 单价 = 最小起订价(「最新价格」区第一档) */
+  const priceIdx=src.indexOf("最新价格");
+  const pseg=priceIdx>=0?src.slice(priceIdx):src;
+  const pm=pseg.match(/(\d{1,6})\+\s*￥([\d.]+)/);
+  if(pm)out.price=parseFloat(pm[2])||0;
+  /* 6) 参数表 → raw + 类别(商品目录)+ 参数值串 */
+  const params=extractParamsFromHtml(src);
+  out.raw=params;
+  const cat=params.find(p=>p.name==="商品目录");
+  if(cat&&hasVal(cat.value))out.category=cat.value.trim();
+  out.val=buildMainVal(params,out.category);
+  /* 7) 备注 = 品牌 + 商品概述 + 商品特性 */
+  out.note=buildNote(src);
   return out;
 }
 async function fetchViaProxy(url){
@@ -1043,6 +1104,16 @@ function resetParamsMatch(){
   window._matchParams=null;
   const w=$("pmWrap");if(w)w.style.display="none";
   const p=$("paramMatchPanel");if(p)p.innerHTML="";
+  MATCH_FIELDS.forEach(f=>{
+    const el=$(f.el);if(!el)return;
+    el.classList.remove("match-ok","match-miss");
+    const st=document.getElementById(f.el+"_st");
+    if(st&&st.parentNode)st.parentNode.removeChild(st);
+    const sel=window._mfix&&window._mfix[f.el];
+    if(sel&&sel.parentNode)sel.parentNode.removeChild(sel);
+    if(window._mfix)delete window._mfix[f.el];
+  });
+  const tip=$("matchTip");if(tip){tip.style.display="none";tip.textContent=""}
 }
 function renderParamsMatch(list){
   if(!list||!list.length)return;
@@ -1089,19 +1160,89 @@ function collectParams(){
   });
   return parts.join("; ");
 }
+/* 7 个核心匹配字段:输入框 id ↔ 匹配数据 key ↔ 数据来源说明 */
+const MATCH_FIELDS=[
+  {key:"mpn",el:"eMpn",label:"型号/名称",src:"商品型号"},
+  {key:"category",el:"eCat",label:"类别",src:"商品目录"},
+  {key:"pkg",el:"ePkg",label:"封装",src:"商品封装"},
+  {key:"val",el:"eVal",label:"参数",src:"商品参数"},
+  {key:"lcsc",el:"eLcsc",label:"LCSC编号",src:"商品编号"},
+  {key:"price",el:"ePrice",label:"单价",src:"价格梯度"},
+  {key:"note",el:"eNote",label:"备注",src:"商品概述/特性"}
+];
+function fillForm(meta){
+  if(!meta||typeof meta!=="object")return;
+  if(meta.mpn!=null&&String(meta.mpn).trim())$("eMpn").value=meta.mpn;
+  if(meta.category!=null&&String(meta.category).trim())$("eCat").value=meta.category;
+  if(meta.pkg!=null&&String(meta.pkg).trim())$("ePkg").value=meta.pkg;
+  if(meta.val!=null&&String(meta.val).trim())$("eVal").value=meta.val;
+  if(meta.lcsc!=null&&String(meta.lcsc).trim())$("eLcsc").value=meta.lcsc;
+  if(meta.price!=null&&String(meta.price).trim())$("ePrice").value=meta.price;
+  if(meta.note!=null&&String(meta.note).trim())$("eNote").value=meta.note;
+}
+function fieldCandidates(f,meta){
+  /* 手动补充候选:参数表中其他「参数名 值」项 + 备注片段 */
+  const out=[];
+  (meta.raw||[]).forEach(p=>{
+    if(!p||!p.name)return;
+    const v=String(p.value==null?"":p.value).trim();
+    out.push({label:p.name+(v?" · "+v:""),value:v||p.name});
+  });
+  if(meta.note){
+    String(meta.note).split("\n").forEach(seg=>{
+      const s=seg.replace(/^(品牌|商品概述|商品特性):\s*/,"").trim();
+      if(s&&s.length<60)out.push({label:s.slice(0,28),value:s});
+    });
+  }
+  const seen=new Set(),uniq=[];
+  out.forEach(c=>{const k=c.label+"|"+c.value;if(!seen.has(k)){seen.add(k);uniq.push(c)}});
+  return uniq.slice(0,40);
+}
+function renderFieldMatch(meta){
+  if(!meta||typeof meta!=="object")return;
+  MATCH_FIELDS.forEach(f=>{
+    const el=$(f.el);if(!el)return;
+    const v=meta[f.key];
+    const ok=hasVal(v);
+    el.classList.toggle("match-ok",ok);
+    el.classList.toggle("match-miss",!ok);
+    let st=document.getElementById(f.el+"_st");
+    if(!st){st=document.createElement("span");st.id=f.el+"_st";st.className="match-status";if(el.parentNode)el.parentNode.appendChild(st)}
+    st.textContent=ok?(f.label+" ✓ 已匹配("+f.src+")"):(f.label+" ✗ 未匹配(无数据,可在下方下拉手动补充)");
+    let sel=window._mfix&&window._mfix[f.el];
+    if(!ok){
+      const cands=fieldCandidates(f,meta);
+      if(!sel){sel=document.createElement("select");window._mfix=window._mfix||{};window._mfix[f.el]=sel;document.body.appendChild(sel)}
+      sel.className="match-sel";
+      sel.title="手动选择该字段对应的信息(来自页面解析候选)";
+      sel.innerHTML='<option value="">← 手动补充:'+esc(f.label)+'</option>'+cands.map(c=>`<option value="${esc(c.value)}">${esc(c.label)}</option>`).join("");
+      sel.onchange=function(){
+        if(!this.value)return;
+        el.value=this.value;
+        el.classList.remove("match-miss");el.classList.add("match-ok");
+        if(st)st.textContent=f.label+" ✓ 已手动匹配";
+      };
+    }else if(sel&&sel.parentNode){
+      sel.parentNode.removeChild(sel);
+      if(window._mfix)delete window._mfix[f.el];
+    }
+  });
+  const n=countMatched(meta);
+  const tip=$("matchTip");
+  if(tip){tip.style.display="block";tip.textContent=`已自动匹配 ${n}/7 个字段:绿色=已匹配,红色=未匹配(可下拉手动补充)。请核对后保存。`}
+}
+function countMatched(meta){
+  return MATCH_FIELDS.filter(f=>hasVal(meta[f.key])).length;
+}
 function applyMatch(f){
   if(!f||typeof f!=="object")return false;
-  if(f.mpn)$("eMpn").value=f.mpn;
-  if(f.lcsc)$("eLcsc").value=f.lcsc;
-  if(f.pkg)$("ePkg").value=f.pkg;
-  if(f.category)$("eCat").value=f.category;
-  if(f.val)$("eVal").value=f.val;
-  if(f.sub1)$("eSub1").value=f.sub1;
-  if(f.sub2)$("eSub2").value=f.sub2;
-  if(f.sub3)$("eSub3").value=f.sub3;
-  if(f.price)$("ePrice").value=f.price;
-  if(f.note)$("eNote").value=f.note;
-  if(f.params)renderParamsMatch(Array.isArray(f.params)?f.params:parseParamsStr(f.params));
+  const meta={
+    mpn:f.mpn||"",category:f.category||f.cat||"",pkg:f.pkg||"",val:f.val||"",
+    lcsc:f.lcsc||"",price:f.price||"",note:f.note||"",
+    raw:Array.isArray(f.raw)?f.raw:(Array.isArray(f.params)?f.params:(parseParamsStr(f.params)))
+  };
+  fillForm(meta);
+  renderFieldMatch(meta);
   onCatChange();
   return true;
 }
@@ -1146,26 +1287,14 @@ async function matchLcscProduct(){
     toast("正在本地抓取并解析立创商品信息…");
     try{
       const html=await fetchViaProxy("https://item.szlcsc.com/"+productId+".html");
-      const params=extractParamsFromHtml(html);
       const meta=extractMetaFromHtml(html);
-      const f={};
-      if(meta.title)f.mpn=meta.title;
-      f.lcsc=lcscNum||meta.lcsc||"";
-      if(f.lcsc)$("eLcsc").value=f.lcsc;
-      if(meta.pkg)f.pkg=meta.pkg;
-      if(meta.brand)f.note=(f.note?f.note+" ":"")+meta.brand;
-      if(meta.price)f.price=meta.price;
-      if(params.length){
-        const vals=params.map(p=>p.value).filter(Boolean);
-        if(!f.val&&vals.length)f.val=vals.slice(0,3).join(" ");
+      if(!hasVal(meta.mpn)&&!hasVal(meta.lcsc)&&!hasVal(meta.pkg)&&!hasVal(meta.category)){
+        toast("页面解析未获取到有效字段(可能被代理拦截或页面结构变化),可发送链接由 AI 完成匹配","warn");
+        return;
       }
-      if(f.mpn)$("eMpn").value=f.mpn;
-      if(f.pkg)$("ePkg").value=f.pkg;
-      if(f.price)$("ePrice").value=f.price;
-      if(f.note)$("eNote").value=f.note;
-      if(f.val)$("eVal").value=f.val;
-      if(params.length)renderParamsMatch(params);
-      toast(params.length?"已本地解析并自动填充商品参数(绿=有数据/红=无数据),请核对后保存":"已解析到商品信息但未识别到参数表,请核对字段","ok");
+      if(!hasVal(meta.lcsc)&&hasVal(lcscNum))meta.lcsc=lcscNum;
+      applyMatch(meta);
+      toast(`已本地解析并自动填充 ${countMatched(meta)}/7 个字段(绿=已匹配 / 红=未匹配可下拉补充),请核对后保存`,"ok");
       return;
     }catch(e){
       toast("本地抓取失败(网络或代理不可用),可发送链接由 AI 完成匹配","err");
@@ -1177,11 +1306,12 @@ async function matchLcscProduct(){
   try{
     const html=await fetchViaProxy("https://so.szlcsc.com/global.html?k="+encodeURIComponent(lcscNum));
     const meta=extractMetaFromHtml(html);
-    const f={lcsc:lcscNum};
-    if(meta.title)f.mpn=meta.title;
-    if(meta.pkg)f.pkg=meta.pkg;
-    if(meta.price)f.price=meta.price;
-    if(f.mpn||f.pkg||f.price){applyMatch(f);toast("已本地解析商品信息(搜索页数据有限),请补充参数","ok");return}
+    if(!hasVal(meta.lcsc))meta.lcsc=lcscNum;
+    if(hasVal(meta.mpn)||hasVal(meta.pkg)||hasVal(meta.price)||hasVal(meta.category)){
+      applyMatch(meta);
+      toast("已本地解析商品信息(搜索页数据有限),请核对字段","ok");
+      return;
+    }
   }catch(e){}
   const req={ts:Date.now(),lcsc:lcscNum,pid:productId,from:"browser"};
   try{localStorage.setItem("lcsc-match-request",JSON.stringify(req))}catch(e){}
