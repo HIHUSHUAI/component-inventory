@@ -432,6 +432,7 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
     </div>
     <textarea id="catReqBox" style="display:none;width:100%;box-sizing:border-box;margin-top:8px;background:var(--panel2);border:1px solid var(--border2);border-radius:8px;color:var(--text);padding:8px 10px;font-size:12px;font-family:ui-monospace,monospace" readonly rows="3"></textarea>
     <div id="catStat" style="font-size:13px;color:var(--muted);margin:10px 0 6px"></div>
+    <datalist id="catMatchList"></datalist>
     <div class="table-wrap" style="max-height:340px">
       <table>
         <thead><tr><th style="width:36px">选</th><th>器件</th><th style="width:110px">当前类别</th><th style="width:190px">匹配类别</th><th style="width:80px">状态</th></tr></thead>
@@ -1609,7 +1610,7 @@ async function catMatchOnline(){
   if(rows.length>12)toast(`将逐个抓取 ${rows.length} 个编号的立创搜索页,可能需 1-2 分钟,请稍候…`);
   const btn=$("catOnlineBtn");
   const oldTxt=btn?btn.textContent:"";
-  let okN=0;
+  let okN=0,failNet=0,failParse=0;
   for(let i=0;i<rows.length;i++){
     const r=rows[i];
     if(btn)btn.textContent=`匹配中 ${i+1}/${rows.length}: ${r.lcsc}`;
@@ -1618,13 +1619,14 @@ async function catMatchOnline(){
       if(html){
         const cat=extractCatFromSearch(html);
         if(cat){r.matched=cat;r.status="ok";okN++}
-      }
-    }catch(e){}
+        else failParse++;
+      }else failNet++;
+    }catch(e){failNet++}
   }
   if(btn)btn.textContent=oldTxt;
   renderCatMatch();
   const left=rows.length-okN;
-  toast(`在线匹配完成:成功 ${okN} 条`+(left?`,失败 ${left} 条(可手动指定类别或稍后重试)`:"")+"","ok");
+  toast(`在线匹配完成:成功 ${okN} 条`+(failNet?`,${failNet} 条网络/代理失败`:"")+(failParse?`,${failParse} 条页面未识别到类别`:"")+(left?`;剩余可手动指定类别(输入框可直接新建)或重试`:"")+"","ok");
 }
 function genCatMatchRequest(){
   const lcs=[...new Set((window._catMatch||[]).filter(r=>!r.matched&&r.lcsc).map(r=>r.lcsc))];
@@ -1662,30 +1664,34 @@ function applyCatMatchCode(code){
 function renderCatMatch(){
   const rows=window._catMatch||[];
   const cats=allCats();
-  const opts=(sel,hasCur)=>'<option value="">'+(sel?"":"选择类别…")+'</option>'+cats.map(c=>`<option value="${esc(c)}" ${c===sel?"selected":""}>${esc(c)}</option>`).join("");
+  /* 关键:匹配到的新类别(不在预设/库存中)必须加入列表,否则下拉无法显示与保存 */
+  rows.forEach(r=>{if(r.matched&&!cats.includes(r.matched))cats.push(r.matched)});
+  const dl=$("catMatchList");
+  if(dl)dl.innerHTML=cats.map(c=>`<option value="${esc(c)}">`).join("");
   $("catBody").innerHTML=rows.map(r=>{
     const ok=r.status==="ok";
     const selCls=ok?"sel-ok":(r.cur?"sel-miss":"");
     return `<tr>
       <td><input type="checkbox" class="cat-ck" id="catck_${r.id}" ${ok?"checked":""} onchange="catRowCheck('${r.id}')"></td>
-      <td><span class="mpn">${esc(r.mpn)}</span>${r.lcsc?`<div style="font-family:ui-monospace,monospace;font-size:11px;color:var(--muted)">${esc(r.lcsc)}</div>`:""}</td>
+      <td><span class="mpn">${esc(r.mpn)}</span>${r.lcsc?`<div style="font-family:ui-monospace,monospace;font-size:11px;color:var(--muted)">${esc(r.lcsc)} <a style="cursor:pointer;color:var(--accent)" onclick="openLcsc('${r.id}')">打开立创</a></div>`:""}</td>
       <td style="color:var(--muted)">${esc(r.cur||"—")}</td>
-      <td><select id="catsel_${r.id}" class="cat-sel ${selCls}" onchange="catRowSel('${r.id}',this.value)">${opts(r.matched)}</select></td>
+      <td><input id="catsel_${r.id}" class="cat-sel ${selCls}" list="catMatchList" value="${esc(r.matched||"")}" placeholder="选择或输入类别(可新建)…" oninput="catRowInput('${r.id}',this.value)" onchange="catRowSel('${r.id}',this.value)"></td>
       <td id="catbdg_${r.id}">${ok?'<span class="badge green">已匹配</span>':'<span class="badge red">待补充</span>'}</td>
     </tr>`;
   }).join("")||'<tr><td colspan="5"><div class="empty">没有可匹配的器件</div></td></tr>';
   catStat();
 }
-function catRowSel(id,val){
+function catRowInput(id,val){
   const r=(window._catMatch||[]).find(x=>x.id===id);if(!r)return;
   r.matched=val||"";r.status=val?"ok":"pending";
-  const ck=document.getElementById("catck_"+id);if(ck)ck.checked=!!val;
+  const ck=document.getElementById("catck_"+id);if(ck&&val)ck.checked=true;
   const sel=document.getElementById("catsel_"+id);
   if(sel){sel.classList.toggle("sel-ok",!!val);sel.classList.toggle("sel-miss",!val)}
   const bdg=document.getElementById("catbdg_"+id);
   if(bdg)bdg.innerHTML=val?'<span class="badge green">已匹配</span>':'<span class="badge red">待补充</span>';
   catStat();
 }
+function catRowSel(id,val){catRowInput(id,val)}
 function catRowCheck(id){
   const r=(window._catMatch||[]).find(x=>x.id===id);if(!r)return;
   const ck=document.getElementById("catck_"+id);
