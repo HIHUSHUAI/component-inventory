@@ -1233,6 +1233,7 @@ function extractMetaFromHtml(html){
   return out;
 }
 const CORS_MAKERS=[
+  u=>"http://127.0.0.1:8899/proxy?url="+encodeURIComponent(u),   /* 本地中转服务(server.js),走本机网络直连,最可靠 */
   u=>u,                                                       /* 直连(部分环境可用) */
   u=>"https://r.jina.ai/"+u,                                  /* Jina Reader:转文本,带 CORS,国内可达性好 */
   u=>"https://api.allorigins.win/raw?url="+encodeURIComponent(u),
