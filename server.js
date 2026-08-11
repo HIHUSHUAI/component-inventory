@@ -68,6 +68,15 @@ const server=http.createServer((req,res)=>{
   });
 });
 
+server.on('error',e=>{
+  if(e.code==='EADDRINUSE'){
+    console.log('');
+    console.log('端口 '+PORT+' 已被占用:本地服务可能已在运行。');
+    console.log('请直接打开: http://127.0.0.1:'+PORT+'/元器件库存管理.html');
+    process.exit(0);
+  }
+  throw e;
+});
 server.listen(PORT,'127.0.0.1',()=>{
   console.log('');
   console.log('==============================================');
