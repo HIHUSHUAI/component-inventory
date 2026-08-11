@@ -323,6 +323,22 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
   </div>
 </div>
 
+<div class="modal-mask" id="pasteMask">
+  <div class="modal">
+    <h2><span>粘贴解析(离线兜底)</span><button class="close" onclick="closeModal('pasteMask')">✕</button></h2>
+    <div style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:10px">
+      本地/代理抓取失败时使用此通道。请在新标签页打开立创商品详情页(<b style="color:var(--text)">item.szlcsc.com</b>),按 <b style="color:var(--text)">Ctrl+A</b>(全选)→ <b style="color:var(--text)">Ctrl+C</b>(复制)页面全部内容,粘贴到下方后点「本地解析」——不依赖任何网络代理。
+    </div>
+    <textarea id="pasteText" rows="12" placeholder="在此粘贴立创商品详情页全文(Ctrl+A 全选复制)…" style="width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--border2);border-radius:8px;color:var(--text);padding:10px;font-size:12px;font-family:ui-monospace,monospace;outline:none;resize:vertical"></textarea>
+    <div class="form-actions" style="margin-top:12px">
+      <button type="button" class="btn" onclick="openLcscByInput()" title="在立创商城打开搜索页,便于复制页面内容">打开立创商城</button>
+      <span style="flex:1"></span>
+      <button type="button" class="btn" onclick="closeModal('pasteMask')">取消</button>
+      <button type="button" class="btn primary" onclick="parsePastedText()">本地解析</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-mask" id="impMask">
   <div class="modal wide">
     <h2><span>导入数据</span><button class="close" onclick="closeModal('impMask')">✕</button></h2>
@@ -1002,6 +1018,19 @@ function extractParamsFromHtml(html){
     if(!n&&!v)continue;
     params.push({name:n||a,value:v});
   }
+  if(!params.length){
+    /* Markdown 表格(r.jina.ai 等文本代理输出):| a | b | c | 或 | a | b | */
+    const mdRe=/^\s*\|\s*([^|\n]*?)\s*\|\s*([^|\n]*?)\s*\|\s*([^|\n]*?)\s*\|/gm;
+    let mm;
+    while((mm=mdRe.exec(seg))){
+      const a=mm[1].trim(),n=mm[2].trim(),v=(mm[3]||"").trim();
+      if(!a&&!n&&!v)continue;
+      if(/^(属性|参数|值)$/.test(a)||/^(属性|参数|值)$/.test(n)||/^\s*:?-{2,}\s*$/.test(n))continue;
+      if(/^商品目录$/.test(a)&&n){params.push({name:"商品目录",value:n});continue}
+      if(!n&&!v)continue;
+      params.push({name:n||a,value:v});
+    }
+  }
   return params;
 }
 function cleanVal(v){return String(v==null?"":v).replace(/[（(][^）)]*[)）]/g,"").trim()}
@@ -1066,31 +1095,43 @@ function extractMetaFromHtml(html){
   out.raw=params;
   const cat=params.find(p=>p.name==="商品目录");
   if(cat&&hasVal(cat.value))out.category=cat.value.trim();
+  /* 文本回退(无表格结构):商品目录 直接跟类别文本 */
+  if(!out.category){
+    const ct=src.match(/商品目录[\s:：]{0,8}([^\s,，;；<>\n]{1,30})/);
+    if(ct)out.category=stripTags(ct[1]).trim();
+  }
   out.val=buildMainVal(params,out.category);
   /* 7) 备注 = 品牌 + 商品概述 + 商品特性 */
   out.note=buildNote(src);
   return out;
 }
-async function fetchViaProxy(url){
-  const makers=[
-    u=>u,
-    u=>"https://api.allorigins.win/raw?url="+encodeURIComponent(u),
-    u=>"https://corsproxy.io/?url="+encodeURIComponent(u),
-    u=>"https://api.codetabs.com/v1/proxy?quest="+encodeURIComponent(u)
-  ];
-  for(const mk of makers){
+const CORS_MAKERS=[
+  u=>u,                                                       /* 直连(部分环境可用) */
+  u=>"https://r.jina.ai/"+u,                                  /* Jina Reader:转文本,带 CORS,国内可达性好 */
+  u=>"https://api.allorigins.win/raw?url="+encodeURIComponent(u),
+  u=>"https://api.codetabs.com/v1/proxy?quest="+encodeURIComponent(u),
+  u=>"https://corsproxy.io/?url="+encodeURIComponent(u),
+  u=>"https://cors.eu.org/"+encodeURIComponent(u)
+];
+async function fetchViaProxy(url,timeoutMs){
+  /* 并行尝试全部源,首个成功即返回文本;全部失败返回 null */
+  const to=timeoutMs||8000;
+  const jobs=CORS_MAKERS.map(async mk=>{
+    const ctl=typeof AbortController!=="undefined"?new AbortController():null;
+    const tm=ctl?setTimeout(()=>ctl.abort(),to):null;
     try{
-      const ctl=typeof AbortController!=="undefined"?new AbortController():null;
-      const tm=ctl?setTimeout(()=>ctl.abort(),9000):null;
       const r=await fetch(mk(url),ctl?{signal:ctl.signal}:{});
-      if(tm)clearTimeout(tm);
       if(r.ok){
-        const txt=await r.text();
-        if(txt&&txt.length>1500)return txt;
+        const t=await r.text();
+        if(t&&t.length>600)return{src:mk(url).slice(0,40),text:t};
       }
-    }catch(e){}
-  }
-  throw new Error("proxy-fail");
+    }catch(e){}finally{if(tm)clearTimeout(tm)}
+    return null;
+  });
+  const settled=await Promise.all(jobs);
+  const hit=settled.find(x=>x&&x.text);
+  if(hit)return hit.text;
+  return null;
 }
 function parseParamsStr(s){
   if(!s)return[];
@@ -1285,11 +1326,17 @@ async function matchLcscProduct(){
   /* 本地直连解析:通过 CORS 代理抓取详情页并解析商品参数,不经过 AI */
   if(productId){
     toast("正在本地抓取并解析立创商品信息…");
+    const html=await fetchViaProxy("https://item.szlcsc.com/"+productId+".html");
+    if(!html){
+      toast("本地/代理抓取未成功,已打开「粘贴解析」兜底通道——复制详情页全文粘贴即可本地解析,无需代理","warn");
+      openPasteParse();
+      return;
+    }
     try{
-      const html=await fetchViaProxy("https://item.szlcsc.com/"+productId+".html");
       const meta=extractMetaFromHtml(html);
       if(!hasVal(meta.mpn)&&!hasVal(meta.lcsc)&&!hasVal(meta.pkg)&&!hasVal(meta.category)){
-        toast("页面解析未获取到有效字段(可能被代理拦截或页面结构变化),可发送链接由 AI 完成匹配","warn");
+        toast("页面解析未获取到有效字段(可能被代理拦截或页面结构变化),已打开「粘贴解析」兜底通道","warn");
+        openPasteParse();
         return;
       }
       if(!hasVal(meta.lcsc)&&hasVal(lcscNum))meta.lcsc=lcscNum;
@@ -1297,26 +1344,55 @@ async function matchLcscProduct(){
       toast(`已本地解析并自动填充 ${countMatched(meta)}/7 个字段(绿=已匹配 / 红=未匹配可下拉补充),请核对后保存`,"ok");
       return;
     }catch(e){
-      toast("本地抓取失败(网络或代理不可用),可发送链接由 AI 完成匹配","err");
+      toast("本地解析异常,已打开「粘贴解析」兜底通道","err");
+      openPasteParse();
       return;
     }
   }
   /* 仅 LCSC 编号:先尝试搜索页本地解析,失败则提交请求 */
   toast("正在本地解析…");
-  try{
-    const html=await fetchViaProxy("https://so.szlcsc.com/global.html?k="+encodeURIComponent(lcscNum));
-    const meta=extractMetaFromHtml(html);
-    if(!hasVal(meta.lcsc))meta.lcsc=lcscNum;
-    if(hasVal(meta.mpn)||hasVal(meta.pkg)||hasVal(meta.price)||hasVal(meta.category)){
-      applyMatch(meta);
-      toast("已本地解析商品信息(搜索页数据有限),请核对字段","ok");
-      return;
-    }
-  }catch(e){}
+  const html=await fetchViaProxy("https://so.szlcsc.com/global.html?k="+encodeURIComponent(lcscNum));
+  if(html){
+    try{
+      const meta=extractMetaFromHtml(html);
+      if(!hasVal(meta.lcsc))meta.lcsc=lcscNum;
+      if(hasVal(meta.mpn)||hasVal(meta.pkg)||hasVal(meta.price)||hasVal(meta.category)){
+        applyMatch(meta);
+        toast("已本地解析商品信息(搜索页数据有限),请核对字段","ok");
+        return;
+      }
+    }catch(e){}
+  }
   const req={ts:Date.now(),lcsc:lcscNum,pid:productId,from:"browser"};
   try{localStorage.setItem("lcsc-match-request",JSON.stringify(req))}catch(e){}
   if(FS.mode==="file")FS.writeFile("pending-match.json",JSON.stringify(req));
   toast("本地解析未获取到数据,已提交匹配请求:LCSC "+lcscNum+"\n可发送链接由 AI 匹配,或粘贴 item.szlcsc.com 详情页链接本地解析","warn");
+}
+function openPasteParse(){
+  openModal("pasteMask");
+  $("pasteText").value="";
+  try{setTimeout(()=>$("pasteText").focus(),60)}catch(e){}
+}
+function openLcscByInput(){
+  const cur=window._editId?items.find(x=>x.id===window._editId):null;
+  const kw=cur&&(cur.lcsc||cur.mpn)||($("eLcsc").value.trim()||$("eMpn").value.trim());
+  const s=prompt("输入 LCSC 编号或型号,在立创商城打开(用于复制详情页全文):",kw||"");
+  if(s===null)return;
+  const key=s.trim()||kw;
+  if(!key){toast("请输入编号或型号","warn");return}
+  try{window.open("https://so.szlcsc.com/global.html?k="+encodeURIComponent(key),"_blank","noopener")}catch(e){toast("无法打开立创商城","err")}
+}
+function parsePastedText(){
+  const txt=$("pasteText").value.trim();
+  if(!txt){toast("请先粘贴立创商品详情页内容","warn");return}
+  const meta=extractMetaFromHtml(txt);
+  if(!hasVal(meta.mpn)&&!hasVal(meta.lcsc)&&!hasVal(meta.category)&&!hasVal(meta.pkg)){
+    toast("未从粘贴内容识别到商品信息,请确认复制的是立创商品详情页(item.szlcsc.com)全文","err");
+    return;
+  }
+  applyMatch(meta);
+  closeModal("pasteMask");
+  toast(`已从粘贴内容解析并填充 ${countMatched(meta)}/7 个字段(红框可下拉补充),请核对后保存`,"ok");
 }
 function openBatchPrice(){
   if(!selSet.size){toast("请先勾选要查价的器件","warn");return}
