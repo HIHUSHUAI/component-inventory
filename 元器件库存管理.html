@@ -1643,13 +1643,14 @@ async function catMatchOnline(){
   if(rows.length>12)toast(`将逐个抓取 ${rows.length} 个编号的立创搜索页,可能需 1-2 分钟,请稍候…`);
   const btn=$("catOnlineBtn");
   const oldTxt=btn?btn.textContent:"";
-  let okN=0,failNet=0,failParse=0;
+  let okN=0,failNet=0,failParse=0,failAnti=0;
   for(let i=0;i<rows.length;i++){
     const r=rows[i];
     if(btn)btn.textContent=`匹配中 ${i+1}/${rows.length}: ${r.lcsc}`;
     try{
       const html=await fetchViaProxy("https://so.szlcsc.com/global.html?k="+encodeURIComponent(r.lcsc),6000);
       if(html){
+        if(/\b_xvasu\b|a3_0x5716|challenge/i.test(html)&&html.length<8000){failAnti++;continue} /* 立创反爬 JS 挑战页 */
         const cat=extractCatFromSearch(html);
         if(cat){r.matched=cat;r.status="ok";okN++}
         else{
@@ -1666,9 +1667,9 @@ async function catMatchOnline(){
   else{
     let msg=`在线匹配:成功 ${okN} 条,${left} 条未匹配`;
     if(failNet)msg+=`,${failNet} 条网络失败`;
+    if(failAnti)msg+=`,${failAnti} 条被立创反爬拦截(返回 JS 验证页,浏览器/本地服务均无法绕过)`;
     if(failParse)msg+=`,${failParse} 条未识别到类别`;
-    if(failParse&&FS.mode==="file")msg+=`(抓取片段已存 data/debug-search-*.html,可发送分析)`;
-    msg+="。可「复制请求(发助手)」发送编号,返回结果后「粘贴结果」";
+    msg+="。可靠方式:点「复制请求(发助手)」发送编号,返回结果后「粘贴结果」;或「打开立创」手动查看类目输入";
     toast(msg,"warn");
   }
 }
