@@ -377,6 +377,10 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
       <div style="font-size:13px;color:var(--muted)"><span id="impFmt" style="color:var(--accent);font-weight:500"></span> · 已读取 <b id="impRows" style="color:var(--text)">0</b> 行数据。请确认每一列对应的字段:</div>
       <table class="map-table" id="mapTable"></table>
       <div class="preview"><table id="impPrev"></table></div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:10px 0 4px;cursor:pointer">
+        <input type="checkbox" id="autoCatCk" checked style="width:16px;height:16px;accent-color:var(--accent)">
+        <span><b style="color:var(--text)">导入后自动匹配类别</b><span style="color:var(--muted)">(按 LCSC 编号在线抓取立创,仅补全空类别,需网络)</span></span>
+      </label>
       <div class="form-actions">
         <button class="btn" onclick="backImport()">返回</button>
         <button class="btn primary" onclick="doImport()">开始导入</button>
@@ -1581,25 +1585,31 @@ function catFromLocal(silent){
   if(!silent)toast(`已从现有库存学习并匹配 ${n} 条`,"ok");
 }
 function extractCatFromSearch(html){
-  /* 立创搜索页(so.szlcsc.com/global.html?k=编号)第一个商品卡片的类别:
-     位置 = 商品卡内 dl 第 4 个(dd > a > span),Selector 由用户提供 */
+  /* 立创搜索页(so.szlcsc.com/global.html?k=编号)第一个商品卡片的类别。
+     优先按用户提供的位置 Selector(dl 第4个的 dd>a>span),再按「类目链接特征」
+     (立创类目均指向 list.szlcsc.com/catalog/… )兜底,最后取商品卡内短文本候选。 */
   if(typeof DOMParser==="undefined")return"";
   let doc;
   try{doc=new DOMParser().parseFromString(String(html),"text/html")}catch(e){return""}
   if(!doc||!doc.querySelector)return"";
+  const pick=el=>{
+    const t=el?el.textContent.replace(/\s+/g," ").trim():"";
+    return t&&t.length<30?t:"";
+  };
   const sels=[
     "#__next main div div div div div div.product-group-leader.relative.mb-\\[10px\\] div section div div:nth-child(1) div:nth-child(1) div.w-\\[178px\\]._lg\\:w-\\[215px\\] dl:nth-child(4) dd a span",
     "main .product-group-leader dl:nth-child(4) dd a span",
     ".product-group-leader dl:nth-child(4) dd a span",
-    "[class*='product-group-leader'] dl:nth-child(4) dd a span"
+    "[class*='product-group-leader'] dl:nth-child(4) dd a span",
+    "[class*='product-group-leader'] a[href*='list.szlcsc.com/catalog']",
+    "main a[href*='list.szlcsc.com/catalog']",
+    "a[href*='list.szlcsc.com/catalog']"
   ];
   for(const s of sels){
     try{
       const el=doc.querySelector(s);
-      if(el){
-        const t=el.textContent.replace(/\s+/g," ").trim();
-        if(t&&t.length<30)return t;
-      }
+      const t=pick(el);
+      if(t)return t;
     }catch(e){}
   }
   return"";
@@ -1887,7 +1897,9 @@ function renderPrev(){
 }
 function doImport(){
   const mode=document.querySelector('input[name="mode"]:checked').value;
+  const autoCat=!!($("autoCatCk")&&$("autoCatCk").checked);
   let added=0,merged=0,skipped=0;
+  const touched=[];
   const get=(row,f)=>{
     const i=mapping.findIndex(m=>m.field===f);
     if(i<0||!row[i])return"";
@@ -1905,15 +1917,42 @@ function doImport(){
     };
     if(mode==="merge"){
       const hit=items.find(x=>x.mpn.toLowerCase()===mpn.toLowerCase()&&(x.pkg||"")===(item.pkg||""));
-      if(hit){hit.qty=(hit.qty||0)+item.qty;if(item.loc)hit.loc=item.loc;if(!hit.lcsc)hit.lcsc=item.lcsc;hit.updated=now();merged++;return}
+      if(hit){hit.qty=(hit.qty||0)+item.qty;if(item.loc)hit.loc=item.loc;if(!hit.lcsc)hit.lcsc=item.lcsc;hit.updated=now();merged++;touched.push(hit.id);return}
     }
     item.id=Date.now()+"-"+Math.random().toString(36).slice(2,7);
-    items.push(item);added++;
+    items.push(item);added++;touched.push(item.id);
   });
   logAct("imp",`新增 ${added} · 合并 ${merged} · 跳过 ${skipped}`);
   save();render();closeModal("impMask");
   const noPrice=items.filter(i=>!i.price).length;
   toast(`导入完成:新增 ${added} 项,合并 ${merged} 项,跳过 ${skipped} 项`+(noPrice?`;${noPrice} 项未填单价,可「立创查价」填写最小起订价`:""));
+  if(autoCat)runAutoCatAfterImport(touched);
+}
+async function runAutoCatAfterImport(ids){
+  /* 导入后自动匹配类别:按 LCSC 编号在线抓取立创搜索页,仅补全空类别 */
+  const lcses=[...new Set((ids||[]).map(id=>{
+    const it=items.find(x=>x.id===id);
+    return it&&it.lcsc&&(!it.category||it.category==="其他")?it.lcsc.trim().toUpperCase():null;
+  }).filter(Boolean))];
+  if(!lcses.length)return;
+  toast(`正在按 LCSC 编号自动匹配类别(${lcses.length} 个编号)…`);
+  let n=0;
+  for(let i=0;i<lcses.length;i++){
+    const lc=lcses[i];
+    try{
+      const html=await fetchViaProxy("https://so.szlcsc.com/global.html?k="+encodeURIComponent(lc),6000);
+      if(html){
+        const cat=extractCatFromSearch(html);
+        if(cat){
+          items.forEach(it=>{
+            if(it.lcsc&&it.lcsc.trim().toUpperCase()===lc&&(!it.category||it.category==="其他")){it.category=cat;it.updated=now();n++}
+          });
+        }
+      }
+    }catch(e){}
+  }
+  if(n){save();render();toast(`已自动匹配类别:${n} 件(可撤销)`,"ok")}
+  else toast("自动匹配类别未成功(网络受限或未识别到类别),可在「批量匹配类别」中重试或手动填写","warn");
 }
 function exportCSV(viewOnly){
   const list=viewOnly?filtered():items;
