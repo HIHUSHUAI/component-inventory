@@ -1614,6 +1614,27 @@ function extractCatFromSearch(html){
       if(t)return t;
     }catch(e){}
   }
+  /* Next.js 页面兜底:解析 __NEXT_DATA__ 内嵌 JSON(首屏数据含类目,不受 JS 渲染影响) */
+  try{
+    const nm=String(html||"").match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i);
+    if(nm){
+      const data=JSON.parse(nm[1]);
+      const hits=[];
+      (function walk(o){
+        if(!o||typeof o!=="object")return;
+        if(Array.isArray(o)){o.forEach(walk);return}
+        for(const k in o){
+          const v=o[k];
+          if(/catalog|category|classif|catName|类目|sortname/i.test(k)&&typeof v==="string"){
+            const t=v.trim();
+            if(t&&t.length<=30&&!/^(全部|所有|更多|全部类目|全部商品)$/.test(t))hits.push(t);
+          }
+          walk(v);
+        }
+      })(data);
+      if(hits.length)return hits[0];
+    }
+  }catch(e){}
   return"";
 }
 async function catMatchOnline(){
@@ -1631,7 +1652,10 @@ async function catMatchOnline(){
       if(html){
         const cat=extractCatFromSearch(html);
         if(cat){r.matched=cat;r.status="ok";okN++}
-        else failParse++;
+        else{
+          failParse++;
+          if(FS.mode==="file")try{FS.writeFile("debug-search-"+r.lcsc+".html",html.slice(0,200000))}catch(e){}
+        }
       }else failNet++;
     }catch(e){failNet++}
   }
@@ -1639,7 +1663,14 @@ async function catMatchOnline(){
   renderCatMatch();
   const left=rows.length-okN;
   if(!left)toast(`在线匹配完成:成功 ${okN} 条`,"ok");
-  else toast(`在线匹配:成功 ${okN} 条,${left} 条未匹配(网络/未识别)。可点「复制请求(发助手)」发送编号,返回结果后「粘贴结果」即可`,"warn");
+  else{
+    let msg=`在线匹配:成功 ${okN} 条,${left} 条未匹配`;
+    if(failNet)msg+=`,${failNet} 条网络失败`;
+    if(failParse)msg+=`,${failParse} 条未识别到类别`;
+    if(failParse&&FS.mode==="file")msg+=`(抓取片段已存 data/debug-search-*.html,可发送分析)`;
+    msg+="。可「复制请求(发助手)」发送编号,返回结果后「粘贴结果」";
+    toast(msg,"warn");
+  }
 }
 function genCatMatchRequest(){
   const lcs=[...new Set((window._catMatch||[]).filter(r=>!r.matched&&r.lcsc).map(r=>r.lcsc))];
