@@ -193,6 +193,15 @@ mark{background:rgba(210,153,34,.4);color:inherit;border-radius:3px;padding:0 1p
 .match-status{display:block;font-size:11px;margin-top:4px;font-weight:500}
 .match-status.ok{color:var(--green)}
 .match-status.miss{color:var(--red)}
+/* 批量类别匹配弹窗 */
+.cat-src{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.cat-src .btn{margin:0}
+.cat-sel{width:100%;padding:7px 10px;background:var(--panel2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;outline:none;cursor:pointer}
+.cat-sel:focus{border-color:var(--accent)}
+.cat-sel.sel-ok{border-color:var(--green);box-shadow:0 0 0 2px rgba(63,185,80,.12)}
+.cat-sel.sel-miss{border-color:var(--red);box-shadow:0 0 0 2px rgba(248,81,73,.12)}
+.cat-ck{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+#catReqBox{white-space:pre-wrap;word-break:break-all}
 .clickable{cursor:pointer;transition:border-color .15s}
 .clickable:hover{border-color:var(--accent)}
 .stat .v.sub{font-size:12px;color:var(--muted);font-weight:400;margin-top:2px}
@@ -269,6 +278,7 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
     <button class="btn" onclick="batchLoc()" title="统一设置选中项存放位置">批量改位置</button>
     <button class="btn" onclick="batchCat()" title="统一设置选中项类别">批量改类别</button>
     <button class="btn" onclick="openBatchPrice()" title="对照立创商城为选中项批量填写最小起订价">批量查价</button>
+    <button class="btn accent" onclick="openCatMatch()" title="按 LCSC 编号批量匹配类别,确认后生效">批量匹配类别</button>
     <button class="btn warn" onclick="clearSel()">取消选择</button>
   </div>
 
@@ -407,6 +417,33 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
     <div class="form-actions">
       <button class="btn" onclick="closeModal('priceMask')">取消</button>
       <button class="btn primary" onclick="batchPriceSave()">保存单价</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-mask" id="catMatchMask">
+  <div class="modal wide">
+    <h2><span>批量类别匹配(按 LCSC 编号)</span><button class="close" onclick="closeModal('catMatchMask')">✕</button></h2>
+    <div class="note" style="margin-bottom:10px">根据 <b style="color:var(--text)">LCSC 编号</b> 自动匹配器件类别。<b style="color:var(--text)">匹配结果需手动确认后才生效</b>;待补充(未匹配)的器件可手动选择类别,未勾选的行将被跳过。</div>
+    <div class="cat-src">
+      <button class="btn" onclick="catFromLocal()" title="从库存中已有同编号器件的类别学习匹配(离线立即生效)">从已有库存匹配</button>
+      <button class="btn accent" onclick="genCatMatchRequest()" title="生成待匹配编号清单,复制后发送到对话,由 AI 批量匹配类别">AI 批量匹配</button>
+      <button class="btn" onclick="pasteCatMatch()" title="粘贴 AI 返回的匹配结果码(CATMATCH|编号=类别;…)">粘贴匹配结果</button>
+    </div>
+    <textarea id="catReqBox" style="display:none;width:100%;box-sizing:border-box;margin-top:8px;background:var(--panel2);border:1px solid var(--border2);border-radius:8px;color:var(--text);padding:8px 10px;font-size:12px;font-family:ui-monospace,monospace" readonly rows="3"></textarea>
+    <div id="catStat" style="font-size:13px;color:var(--muted);margin:10px 0 6px"></div>
+    <div class="table-wrap" style="max-height:340px">
+      <table>
+        <thead><tr><th style="width:36px">选</th><th>器件</th><th style="width:110px">当前类别</th><th style="width:190px">匹配类别</th><th style="width:80px">状态</th></tr></thead>
+        <tbody id="catBody"></tbody>
+      </table>
+    </div>
+    <div class="form-actions" style="margin-top:12px">
+      <button class="btn" onclick="catToggleAll(true)">全部勾选</button>
+      <button class="btn" onclick="catToggleAll(false)">全部取消</button>
+      <span style="flex:1"></span>
+      <button class="btn" onclick="closeModal('catMatchMask')">取消</button>
+      <button class="btn primary" onclick="confirmCatMatch()">全部确认并保存</button>
     </div>
   </div>
 </div>
@@ -1512,6 +1549,136 @@ function batchPriceSave(){
   logAct("edit",`批量查价更新 ${n} 项`);
   save();render();closeModal("priceMask");
   toast(`已更新 ${n} 项单价(可撤销)`,"ok");
+}
+
+/* ---------- 批量类别匹配(按 LCSC 编号) ---------- */
+function openCatMatch(){
+  if(!selSet.size){toast("请先勾选要匹配类别的器件","warn");return}
+  window._catMatch=[...selSet].map(id=>{
+    const it=items.find(x=>x.id===id);if(!it)return null;
+    return{id,mpn:it.mpn,lcsc:(it.lcsc||"").trim().toUpperCase(),cur:it.category||"",matched:"",status:"pending"};
+  }).filter(Boolean);
+  $("catReqBox").style.display="none";$("catReqBox").value="";
+  catFromLocal(true); /* 先离线学习已有库存中的同编号类别 */
+  openModal("catMatchMask");
+  renderCatMatch();
+}
+function catFromLocal(silent){
+  /* 数据源1:从库存中同 LCSC 编号已有类别学习 */
+  const map={};
+  items.forEach(it=>{
+    if(it.lcsc&&it.category&&it.category!=="其他"){
+      const k=it.lcsc.trim().toUpperCase();
+      if(!map[k])map[k]=it.category;
+    }
+  });
+  let n=0;
+  (window._catMatch||[]).forEach(r=>{
+    if(!r.matched&&map[r.lcsc]){r.matched=map[r.lcsc];r.status="ok";n++}
+  });
+  renderCatMatch();
+  if(!silent)toast(`已从现有库存学习并匹配 ${n} 条`,"ok");
+}
+function genCatMatchRequest(){
+  const lcs=[...new Set((window._catMatch||[]).filter(r=>!r.matched&&r.lcsc).map(r=>r.lcsc))];
+  if(!lcs.length){toast("没有需要匹配的编号(均已匹配)","warn");return}
+  const code="AI类别匹配|"+lcs.join(",");
+  const req={ts:Date.now(),lcsc:lcs,from:"catmatch"};
+  try{localStorage.setItem("lcsc-cat-request",JSON.stringify(req))}catch(e){}
+  if(FS.mode==="file")FS.writeFile("pending-cat-match.json",JSON.stringify(req));
+  $("catReqBox").value=code;$("catReqBox").style.display="block";
+  try{navigator.clipboard.writeText(code).then(()=>toast(`已生成请求并复制:${lcs.length} 个编号待匹配,发送到对话即可`,"ok"),()=>toast(`已生成请求:${lcs.length} 个编号,请复制下方内容发送到对话`,"ok"))}
+  catch(e){toast(`已生成请求:${lcs.length} 个编号,请复制下方内容发送到对话`,"ok")}
+}
+function pasteCatMatch(){
+  const s=prompt("粘贴 AI 返回的匹配结果码(格式:CATMATCH|C2718490=线性稳压器(LDO);C5279042=DC-DC电源芯片)");
+  if(s==null)return;
+  applyCatMatchCode(s);
+}
+function applyCatMatchCode(code){
+  /* 解析 AI 结果码:CATMATCH|编号=类别;编号=类别| */
+  const body=String(code||"").replace(/^CATMATCH\|?/i,"");
+  let n=0;
+  body.split(/[;；]/).forEach(seg=>{
+    const i=seg.indexOf("=");
+    if(i<1)return;
+    const lc=normLcsc(seg.slice(0,i));
+    const cat=seg.slice(i+1).trim();
+    if(!lc||!cat)return;
+    (window._catMatch||[]).forEach(r=>{
+      if(r.lcsc===lc&&!r.matched){r.matched=cat;r.status="ok";n++}
+    });
+  });
+  renderCatMatch();
+  toast(`已应用 AI 匹配结果:${n} 条编号命中类别`,"ok");
+}
+function renderCatMatch(){
+  const rows=window._catMatch||[];
+  const cats=allCats();
+  const opts=(sel,hasCur)=>'<option value="">'+(sel?"":"选择类别…")+'</option>'+cats.map(c=>`<option value="${esc(c)}" ${c===sel?"selected":""}>${esc(c)}</option>`).join("");
+  $("catBody").innerHTML=rows.map(r=>{
+    const ok=r.status==="ok";
+    const selCls=ok?"sel-ok":(r.cur?"sel-miss":"");
+    return `<tr>
+      <td><input type="checkbox" class="cat-ck" id="catck_${r.id}" ${ok?"checked":""} onchange="catRowCheck('${r.id}')"></td>
+      <td><span class="mpn">${esc(r.mpn)}</span>${r.lcsc?`<div style="font-family:ui-monospace,monospace;font-size:11px;color:var(--muted)">${esc(r.lcsc)}</div>`:""}</td>
+      <td style="color:var(--muted)">${esc(r.cur||"—")}</td>
+      <td><select id="catsel_${r.id}" class="cat-sel ${selCls}" onchange="catRowSel('${r.id}',this.value)">${opts(r.matched)}</select></td>
+      <td id="catbdg_${r.id}">${ok?'<span class="badge green">已匹配</span>':'<span class="badge red">待补充</span>'}</td>
+    </tr>`;
+  }).join("")||'<tr><td colspan="5"><div class="empty">没有可匹配的器件</div></td></tr>';
+  catStat();
+}
+function catRowSel(id,val){
+  const r=(window._catMatch||[]).find(x=>x.id===id);if(!r)return;
+  r.matched=val||"";r.status=val?"ok":"pending";
+  const ck=document.getElementById("catck_"+id);if(ck)ck.checked=!!val;
+  const sel=document.getElementById("catsel_"+id);
+  if(sel){sel.classList.toggle("sel-ok",!!val);sel.classList.toggle("sel-miss",!val)}
+  const bdg=document.getElementById("catbdg_"+id);
+  if(bdg)bdg.innerHTML=val?'<span class="badge green">已匹配</span>':'<span class="badge red">待补充</span>';
+  catStat();
+}
+function catRowCheck(id){
+  const r=(window._catMatch||[]).find(x=>x.id===id);if(!r)return;
+  const ck=document.getElementById("catck_"+id);
+  if(ck&&!ck.checked)return; /* 取消勾选不改变已匹配结果 */
+  const sel=document.getElementById("catsel_"+id);
+  if(sel&&sel.value){r.matched=sel.value;r.status="ok"}
+  catStat();
+}
+function catToggleAll(on){
+  (window._catMatch||[]).forEach(r=>{const ck=document.getElementById("catck_"+r.id);if(ck)ck.checked=!!on});
+  catStat();
+}
+function catStat(){
+  const rows=window._catMatch||[];
+  const okN=rows.filter(r=>r.status==="ok").length;
+  const ckN=rows.filter(r=>{const ck=document.getElementById("catck_"+r.id);return ck?ck.checked:r.status==="ok"}).length;
+  const st=$("catStat");
+  if(st)st.textContent=`共 ${rows.length} 件 · 已匹配 ${okN} · 待补充 ${rows.length-okN} · 已勾选 ${ckN}`;
+}
+function confirmCatMatch(){
+  const rows=window._catMatch||[];
+  const todo=[],skipNoCat=[];
+  rows.forEach(r=>{
+    const ck=document.getElementById("catck_"+r.id);
+    if(!ck||!ck.checked)return; /* 未勾选 = 跳过 */
+    const sel=document.getElementById("catsel_"+r.id);
+    const cat=sel?sel.value.trim():"";
+    if(!cat){skipNoCat.push(r.mpn);return} /* 勾选但未指定类别 = 防误操作,跳过并提示 */
+    const it=items.find(x=>x.id===r.id);
+    if(it&&it.category!==cat)todo.push({it,cat});
+  });
+  if(!todo.length&&!skipNoCat.length){toast("没有需要更新的项","warn");return}
+  if(todo.length){
+    snapshot(); /* 快照在修改前 */
+    todo.forEach(({it,cat})=>{it.category=cat;it.updated=now()});
+    logAct("edit",`批量类别匹配更新 ${todo.length} 项`+(skipNoCat.length?`,跳过 ${skipNoCat.length} 项`:""));
+    save();
+  }
+  render();closeModal("catMatchMask");
+  toast(`已更新 ${todo.length} 件类别(可撤销)`+(skipNoCat.length?`,${skipNoCat.length} 件未指定类别已跳过`:"")+"","ok");
 }
 
 /* ---------- CSV / Excel 导入(总入口:自动识别格式) ---------- */
