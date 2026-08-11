@@ -173,18 +173,6 @@ mark{background:rgba(210,153,34,.4);color:inherit;border-radius:3px;padding:0 1p
 .toast.warn{border-color:var(--amber);color:var(--amber)}
 .toast.err{border-color:var(--red);color:var(--red)}
 .fg input.err,.fg select.err{border-color:var(--red);box-shadow:0 0 0 2px rgba(248,81,73,.15)}
-.pm-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
-.pm-row select{flex:0 0 40%;min-width:0;padding:7px 8px;font-size:12px}
-.pm-row input{flex:1;padding:7px 10px;background:var(--panel2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;outline:none;min-width:0}
-.pm-row input:focus{border-color:var(--accent)}
-.pm-row.match-ok input{border-color:var(--green);box-shadow:0 0 0 2px rgba(63,185,80,.12)}
-.pm-row.match-miss input{border-color:var(--red);box-shadow:0 0 0 2px rgba(248,81,73,.12)}
-.pm-row.match-empty input{border-color:var(--amber);box-shadow:0 0 0 2px rgba(210,153,34,.12)}
-.pm-tag{font-size:11px;width:54px;color:var(--muted);white-space:nowrap;flex-shrink:0}
-.pm-row.match-ok .pm-tag{color:var(--green)}
-.pm-row.match-miss .pm-tag{color:var(--red)}
-.pm-row.match-empty .pm-tag{color:var(--amber)}
-.pm-note{font-size:11px;color:var(--muted);font-weight:400;margin-left:8px}
 /* 字段级匹配状态(7 核心字段:绿=已匹配 / 红=未匹配,红框旁下拉手动补充) */
 .fg input.match-ok,.fg select.match-ok,.fg textarea.match-ok{border-color:var(--green)!important;box-shadow:0 0 0 2px rgba(63,185,80,.15)}
 .fg input.match-miss,.fg select.match-miss,.fg textarea.match-miss{border-color:var(--red)!important;box-shadow:0 0 0 2px rgba(248,81,73,.15)}
@@ -313,14 +301,10 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
         <div class="fg" id="fSub3" style="display:none"><label id="lSub3">子参数 3</label><input id="eSub3"></div>
         <div class="fg"><label>存放位置</label><input id="eLoc" placeholder="留空则按类别前缀自动生成"></div>
         <div class="fg"><label>数量</label><input id="eQty" type="number" min="0" value="0"></div>
-        <div class="fg"><label>低库存阈值</label><input id="eTh" type="number" min="0" value="10"></div>
+        <div class="fg"><label>低库存阈值</label><input id="eTh" type="number" min="0" value="3"></div>
         <div class="fg"><label>LCSC 编号</label><input id="eLcsc" placeholder="如 C14663"></div>
         <div class="fg"><label>单价 (¥)</label><input id="ePrice" type="number" min="0" step="0.0001" value="0"></div>
         <div class="fg full"><label>备注</label><textarea id="eNote" placeholder="供应商 / 购买批次 / 注意事项…"></textarea></div>
-        <div class="fg full" id="pmWrap" style="display:none">
-          <label>商品参数匹配<span class="pm-note">绿色=已匹配(有数据) · 红色=无数据/未匹配 · 参数名下拉可手动补充匹配 · 值可编辑</span></label>
-          <div id="paramMatchPanel"></div>
-        </div>
       </div>
       <div class="form-actions">
         <button type="button" class="btn" onclick="fillPriceFromLcsc()" title="打开立创商城并对照最小起订价填入单价">立创查价</button>
@@ -475,7 +459,7 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
         <span class="note" style="margin:0;align-self:center">文件存储需:Chrome/Edge(87+)+ 安全上下文(http 或 https 访问)</span>
       </div>
     </div>
-    <input type="file" id="bakFile" accept=".json,application/json" style="display:none">
+    <input type="file" id="bakFile" accept=".json,application/json" style="display:none" onchange="importBackup(this)">
     <div class="note">说明:「撤销」可回退最近修改(最多 50 步,仅当前会话);「操作记录」可查看全部增删改与出入库历史;CSV 导出(主工具栏)适合用 Excel 查看或迁移。</div>
   </div>
 </div>
@@ -716,7 +700,7 @@ function render(){
   const list=filtered();
   const sort=$("sort").value;
   list.sort((a,b)=>{
-    if(sort==="mpn")return a.mpn.localeCompare(b.mpn,"zh");
+    if(sort==="mpn")return String(a.mpn||"").localeCompare(String(b.mpn||""),"zh");
     if(sort==="loc")return cmpLoc(a.loc,b.loc);
     if(sort==="qtyAsc")return a.qty-b.qty;
     if(sort==="qtyDesc")return b.qty-a.qty;
@@ -809,12 +793,11 @@ function openEdit(id){
   $("eMpn").value=it?it.mpn:"";
   $("eCat").value=it?(it.category||""):"";
   $("ePkg").value=it?(it.pkg||""):"";
-  $("eVal").value=it?((it.sub1||it.sub2||it.sub3)?(it.val||""):""):"";
+  const hasSub=!!(it&&(it.sub1||it.sub2||it.sub3));
+  $("eVal").value=it?(hasSub?((it.val||"").split(" ")[0]||""):(it.val||"")):"";
   $("eSub1").value=it?(it.sub1||""):"";
   $("eSub2").value=it?(it.sub2||""):"";
   $("eSub3").value=it?(it.sub3||""):"";
-  if(!(it&&(it.sub1||it.sub2||it.sub3))){ /* 旧数据:val 整体放主参数 */ }
-  else $("eVal").value=it?((it.val||"").split(" ")[0]||""):"";
   $("eLoc").value=it?(it.loc||""):"";
   $("eQty").value=it?it.qty:0;
   $("eTh").value=it?it.th:10;
@@ -830,7 +813,6 @@ function saveItem(e){
   e.preventDefault();
   const mpn=$("eMpn").value.trim();if(!mpn){$("eMpn").classList.add("err");$("eMpn").focus();toast("请填写型号/名称","err");return}
   $("eMpn").classList.remove("err");
-  const pm=collectParams();
   const dup=items.find(x=>x.id!==(window._editId||"")&&x.mpn.toLowerCase()===mpn.toLowerCase());
   if(dup)toast(`提示:库存已有同型号「${dup.mpn}」(${dup.qty} 件),请注意区分`, "warn");
   const sub1=$("eSub1").value.trim(),sub2=$("eSub2").value.trim(),sub3=$("eSub3").value.trim();
@@ -843,11 +825,10 @@ function saveItem(e){
     sub1,sub2,sub3,
     loc:$("eLoc").value.trim()||(pre?pre+"-1":""),
     qty:Math.max(0,Math.round(num($("eQty").value,0))),
-    th:Math.max(0,Math.round(num($("eTh").value,10))),
+    th:Math.max(0,Math.round(num($("eTh").value,3))),
     lcsc:$("eLcsc").value.trim(),price:Math.max(0,num($("ePrice").value,0)),
     note:$("eNote").value.trim(),updated:now()
   };
-  if(pm)obj.note=[obj.note,("参数: "+pm)].filter(Boolean).join("\n");
   snapshot();
   if(window._editId){
     const it=items.find(x=>x.id===window._editId);
@@ -1270,9 +1251,6 @@ function parseParamsStr(s){
   }).filter(Boolean);
 }
 function resetParamsMatch(){
-  window._matchParams=null;
-  const w=$("pmWrap");if(w)w.style.display="none";
-  const p=$("paramMatchPanel");if(p)p.innerHTML="";
   MATCH_FIELDS.forEach(f=>{
     const el=$(f.el);if(!el)return;
     el.classList.remove("match-ok","match-miss");
@@ -1283,51 +1261,6 @@ function resetParamsMatch(){
     if(window._mfix)delete window._mfix[f.el];
   });
   const tip=$("matchTip");if(tip){tip.style.display="none";tip.textContent=""}
-}
-function renderParamsMatch(list){
-  if(!list||!list.length)return;
-  window._matchParams=list;
-  const panel=$("paramMatchPanel");
-  $("pmWrap").style.display="flex";
-  const opts=name=>list.map(p=>`<option value="${esc(p.name)}" ${p.name===name?"selected":""}>${esc(p.name)}${p.value?" ("+esc(p.value.slice(0,14))+")":""}</option>`).join("");
-  panel.innerHTML=list.map((p,i)=>{
-    const state=p.value?"match-ok":(p.name?"match-miss":"match-empty");
-    const tag=p.value?"已匹配":"无数据";
-    return `<div class="pm-row ${state}" id="pmr_${i}" data-i="${i}">
-      <select id="pmn_${i}" onchange="pmNameChange(${i},this.value)" title="参数名(可下拉选择其他参数完成手动匹配)">${opts(p.name)}</select>
-      <input id="pmv_${i}" value="${esc(p.value)}" placeholder="该参数值(可直接编辑)" oninput="pmState(${i})">
-      <span class="pm-tag" id="pmt_${i}">${tag}</span>
-    </div>`;
-  }).join("");
-}
-function pmNameChange(i,name){
-  const p=window._matchParams?window._matchParams.find(x=>x.name===name):null;
-  const inp=$("pmv_"+i);if(!inp)return;
-  inp.value=p?(p.value||""):"";
-  pmState(i);
-}
-function pmState(i){
-  const inp=$("pmv_"+i);if(!inp)return;
-  const row=$("pmr_"+i);if(!row)return;
-  const v=inp.value.trim();
-  row.classList.toggle("match-ok",!!v);
-  row.classList.toggle("match-miss",!v);
-  row.classList.toggle("match-empty",false);
-  const tag=$("pmt_"+i);
-  if(tag)tag.textContent=v?"已匹配":"无数据";
-}
-function collectParams(){
-  if(!window._matchParams)return"";
-  const parts=[];
-  window._matchParams.forEach((p,i)=>{
-    const inp=$("pmv_"+i);if(!inp)return;
-    const v=inp.value.trim();
-    if(!v)return;
-    const sel=$("pmn_"+i);
-    const name=sel&&sel.value?sel.value:(p.name||"");
-    parts.push(name+" "+v);
-  });
-  return parts.join("; ");
 }
 /* 7 个核心匹配字段:输入框 id ↔ 匹配数据 key ↔ 数据来源说明 */
 const MATCH_FIELDS=[
@@ -1432,7 +1365,15 @@ async function checkMatchResult(){
     }catch(e){}
   }
   if(res&&res.filled&&(!res.consumed||res.ts>res.consumed)){
-    applyMatch(res.fields||{});
+    const f=res.fields||{};
+    const cur=$("eMpn").value.trim();
+    if(f.mpn&&cur&&cur!==f.mpn){
+      res.consumed=Date.now();
+      try{localStorage.setItem("lcsc-match-result",JSON.stringify(res))}catch(e){}
+      toast("检测到您已输入型号,未自动覆盖匹配结果","warn");
+      return false;
+    }
+    applyMatch(f);
     res.consumed=Date.now();
     try{localStorage.setItem("lcsc-match-result",JSON.stringify(res))}catch(e){}
     toast("已自动匹配立创商品,请核对各字段后保存","ok");
@@ -1877,12 +1818,14 @@ function loadXlsxLib(){
   if(window.XLSX)return Promise.resolve();
   const urls=["https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js","https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"];
   return new Promise((res,rej)=>{
+    const to=setTimeout(()=>rej(new Error("load timeout")),15000);
+    const done=ok=>{clearTimeout(to);ok?res():rej(new Error("load failed"))};
     let i=0;
     const tryLoad=()=>{
-      if(i>=urls.length){rej(new Error("load failed"));return}
+      if(i>=urls.length){done(false);return}
       const s=document.createElement("script");
       s.src=urls[i++];
-      s.onload=res;
+      s.onload=()=>done(true);
       s.onerror=()=>{s.remove();tryLoad()};
       document.head.appendChild(s);
     };
@@ -1932,7 +1875,7 @@ function renderPrev(){
     rows.map(r=>`<tr>${r.slice(0,cols).map(c=>`<td>${esc(c)}</td>`).join("")}</tr>`).join("");
 }
 function doImport(){
-  const mode=document.querySelector('input[name="mode"]:checked').value;
+  const mode=(document.querySelector('input[name="mode"]:checked')||{value:"merge"}).value;
   const autoCat=!!($("autoCatCk")&&$("autoCatCk").checked);
   let added=0,merged=0,skipped=0;
   const touched=[];
@@ -1948,7 +1891,7 @@ function doImport(){
     const item={
       mpn,category:normCategory(get(row,"category"))||"其他",pkg:normPkg(get(row,"pkg")),val:get(row,"val"),
       loc:get(row,"loc"),      qty:Math.max(0,Math.round(cleanNum(get(row,"qty")))),
-      th:Math.max(0,Math.round(num(get(row,"th"),10))),lcsc:normLcsc(get(row,"lcsc")),
+      th:Math.max(0,Math.round(num(get(row,"th"),3))),lcsc:normLcsc(get(row,"lcsc")),
       price:Math.max(0,cleanNum(get(row,"price"))),note:get(row,"note"),updated:now()
     };
     if(mode==="merge"){
@@ -2041,7 +1984,11 @@ function parseBomRows(rows){
 }
 function matchBom(b){
   const cands=[];
-  const push=(it,score,how)=>{if(!cands.find(c=>c.it.id===it.id)||cands.find(c=>c.it.id===it.id).score<score)cands.push({it,score,how})};
+  const push=(it,score,how)=>{
+    const ex=cands.find(c=>c.it.id===it.id);
+    if(ex){if(ex.score<score){ex.score=score;ex.how=how}}
+    else cands.push({it,score,how});
+  };
   if(b.lcsc){
     const hit=items.find(i=>i.lcsc&&i.lcsc.toLowerCase()===b.lcsc.toLowerCase());
     if(hit)push(hit,1.0,"LCSC 料号");
@@ -2135,7 +2082,7 @@ const bomDrop=$("bomDrop"),bomFile=$("bomFile");
 bomDrop.onclick=()=>bomFile.click();
 bomDrop.ondragover=e=>{e.preventDefault();bomDrop.classList.add("over")};
 bomDrop.ondragleave=()=>bomDrop.classList.remove("over");
-bomDrop.ondrop=e=>{e.preventDefault();bomDrop.classList.remove("over");if(e.dataTransfer.files[0]){const f=e.dataTransfer.files[0];const r=new FileReader();r.onload=()=>{runBom(parseCSV(r.result))};r.readAsText(f,"UTF-8")}};
+bomDrop.ondrop=e=>{e.preventDefault();bomDrop.classList.remove("over");const f=e.dataTransfer.files[0];if(!f)return;if(isExcelFile(f)){readExcel(f,rows=>runBom(rows));return}const r=new FileReader();r.onload=()=>{runBom(parseCSV(r.result))};r.readAsText(f,"UTF-8")};
 function openBom(){$("bomText").value=$("bomText").value||"";openModal("bomMask")}
 
 /* ---------- 统计看板(SVG) ---------- */
@@ -2250,15 +2197,21 @@ const FS=(()=>{
       return await f.text();
     }catch(e){return null}
   }
+  const _wq={};
   async function writeFile(name,text){
     if(mode!=="file"||!dirHandle)return false;
-    try{
-      const sub=await dirHandle.getDirectoryHandle("data",{create:true});
-      const fh=await sub.getFileHandle(name,{create:true});
-      const w=await fh.createWritable();
-      await w.write(text);await w.close();
-      return true;
-    }catch(e){return false}
+    const prev=_wq[name]||Promise.resolve();
+    const job=prev.then(async()=>{
+      try{
+        const sub=await dirHandle.getDirectoryHandle("data",{create:true});
+        const fh=await sub.getFileHandle(name,{create:true});
+        const w=await fh.createWritable();
+        await w.write(text);await w.close();
+        return true;
+      }catch(e){return false}
+    });
+    _wq[name]=job.catch(()=>{});
+    return job;
   }
   return{supported,connect,readFile,writeFile,get mode(){return mode}};
 })();
