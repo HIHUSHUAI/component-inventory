@@ -1096,11 +1096,13 @@ function extractMetaByDom(html){
     if(out.raw.length)out.note="商品参数: "+out.raw.map(p=>p.name+(p.value?" "+p.value:"(无值)")).join("; ");
     if(!out.category&&out.raw.length){const c=out.raw.find(p=>p.name==="商品目录");if(c)out.category=c.value}
   }
-  /* 单价:价格区第一档(div:nth-child(1) span:nth-child(2)),回退文本 */
-  const priceBox=doc.querySelector("[class*='FAFAFA']");
+  /* 单价:价格区第一档(div:nth-child(1) span:nth-child(2)),多选择器回退文本 */
+  const priceSels=["[class*='FAFAFA']","[class*='price']","[class*='Price']","[class*='PRICE']","[class*='Money']","[class*='amount']"];
+  let priceBox=null;
+  for(const ps of priceSels){priceBox=doc.querySelector(ps);if(priceBox)break}
   const sp=priceBox?priceBox.querySelector("div:nth-child(1) span:nth-child(2)"):null;
-  if(sp){const n=parseFloat(txt(sp).replace(/[￥¥,]/g,""));if(isFinite(n))out.price=n}
-  if(!out.price){const m=String(html).match(/(\d{1,6})\+\s*[￥¥]([\d.]+)/);if(m)out.price=parseFloat(m[2])||0}
+  if(sp){const n=parseFloat(txt(sp).replace(/[￥¥,]/g,""));if(isFinite(n)&&n>0)out.price=n}
+  if(!out.price){const m=String(html).match(/(\d{1,6})\s*\+\s*[￥¥]\s*([\d.]+)/);if(m){const n=parseFloat(m[2]);if(isFinite(n)&&n>0)out.price=n}}
   if(!hasVal(out.val))out.val=extractTitleParam(html);
   return hit?out:null;
 }
@@ -1168,8 +1170,8 @@ function extractMetaFromHtml(html){
   /* 5) 单价 = 最小起订价(「最新价格」区第一档) */
   const priceIdx=src.indexOf("最新价格");
   const pseg=priceIdx>=0?src.slice(priceIdx):src;
-  const pm=pseg.match(/(\d{1,6})\+\s*￥([\d.]+)/);
-  if(pm)out.price=parseFloat(pm[2])||0;
+  const pm=pseg.match(/(\d{1,6})\s*\+\s*￥\s*([\d.]+)/);
+  if(pm){const n=parseFloat(pm[2]);if(isFinite(n)&&n>0)out.price=n}
   /* 6) 参数表 → raw + 类别(商品目录)+ 参数值串 */
   const params=extractParamsFromHtml(src);
   out.raw=params;
@@ -1335,7 +1337,14 @@ function renderFieldMatch(meta){
     let sel=window._mfix&&window._mfix[f.el];
     if(!ok){
       const cands=fieldCandidates(f,meta);
-      if(!sel){sel=document.createElement("select");window._mfix=window._mfix||{};window._mfix[f.el]=sel;document.body.appendChild(sel)}
+      if(!sel){
+        sel=document.createElement("select");
+        window._mfix=window._mfix||{};window._mfix[f.el]=sel;
+        /* 插入到输入框所在表单行内、紧跟输入框之后(此前误插到 body 末尾导致看不到) */
+        const parent=el.parentNode||document.body;
+        if(el.nextSibling)parent.insertBefore(sel,el.nextSibling);
+        else parent.appendChild(sel);
+      }
       sel.className="match-sel";
       sel.title="手动选择该字段对应的信息(来自页面解析候选)";
       sel.innerHTML='<option value="">← 手动补充:'+esc(f.label)+'</option>'+cands.map(c=>`<option value="${esc(c.value)}">${esc(c.label)}</option>`).join("");
