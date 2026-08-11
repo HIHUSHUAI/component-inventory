@@ -424,11 +424,11 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
 <div class="modal-mask" id="catMatchMask">
   <div class="modal wide">
     <h2><span>批量类别匹配(按 LCSC 编号)</span><button class="close" onclick="closeModal('catMatchMask')">✕</button></h2>
-    <div class="note" style="margin-bottom:10px">根据 <b style="color:var(--text)">LCSC 编号</b> 自动匹配器件类别。<b style="color:var(--text)">匹配结果需手动确认后才生效</b>;待补充(未匹配)的器件可手动选择类别,未勾选的行将被跳过。</div>
+    <div class="note" style="margin-bottom:10px">根据 <b style="color:var(--text)">LCSC 编号</b> 自动匹配器件类别:<b style="color:var(--text)">「在线匹配」</b>逐个抓取立创搜索页,按商品卡片类别位置提取。匹配结果需手动确认后才生效;待补充(未匹配)的器件可手动选择类别,未勾选的行将被跳过。</div>
     <div class="cat-src">
       <button class="btn" onclick="catFromLocal()" title="从库存中已有同编号器件的类别学习匹配(离线立即生效)">从已有库存匹配</button>
-      <button class="btn accent" onclick="genCatMatchRequest()" title="生成待匹配编号清单,复制后发送到对话,由 AI 批量匹配类别">AI 批量匹配</button>
-      <button class="btn" onclick="pasteCatMatch()" title="粘贴 AI 返回的匹配结果码(CATMATCH|编号=类别;…)">粘贴匹配结果</button>
+      <button class="btn accent" id="catOnlineBtn" onclick="catMatchOnline()" title="逐个抓取立创搜索页(so.szlcsc.com/global.html?k=编号),按商品卡片类别位置提取">在线匹配</button>
+      <button class="btn" onclick="pasteCatMatch()" title="粘贴匹配结果码(CATMATCH|编号=类别;…,备用)">粘贴结果(备用)</button>
     </div>
     <textarea id="catReqBox" style="display:none;width:100%;box-sizing:border-box;margin-top:8px;background:var(--panel2);border:1px solid var(--border2);border-radius:8px;color:var(--text);padding:8px 10px;font-size:12px;font-family:ui-monospace,monospace" readonly rows="3"></textarea>
     <div id="catStat" style="font-size:13px;color:var(--muted);margin:10px 0 6px"></div>
@@ -1578,6 +1578,53 @@ function catFromLocal(silent){
   });
   renderCatMatch();
   if(!silent)toast(`已从现有库存学习并匹配 ${n} 条`,"ok");
+}
+function extractCatFromSearch(html){
+  /* 立创搜索页(so.szlcsc.com/global.html?k=编号)第一个商品卡片的类别:
+     位置 = 商品卡内 dl 第 4 个(dd > a > span),Selector 由用户提供 */
+  if(typeof DOMParser==="undefined")return"";
+  let doc;
+  try{doc=new DOMParser().parseFromString(String(html),"text/html")}catch(e){return""}
+  if(!doc||!doc.querySelector)return"";
+  const sels=[
+    "#__next main div div div div div div.product-group-leader.relative.mb-\\[10px\\] div section div div:nth-child(1) div:nth-child(1) div.w-\\[178px\\]._lg\\:w-\\[215px\\] dl:nth-child(4) dd a span",
+    "main .product-group-leader dl:nth-child(4) dd a span",
+    ".product-group-leader dl:nth-child(4) dd a span",
+    "[class*='product-group-leader'] dl:nth-child(4) dd a span"
+  ];
+  for(const s of sels){
+    try{
+      const el=doc.querySelector(s);
+      if(el){
+        const t=el.textContent.replace(/\s+/g," ").trim();
+        if(t&&t.length<30)return t;
+      }
+    }catch(e){}
+  }
+  return"";
+}
+async function catMatchOnline(){
+  const rows=(window._catMatch||[]).filter(r=>!r.matched&&r.lcsc);
+  if(!rows.length){toast("没有需要在线匹配的编号(均已匹配)","warn");return}
+  if(rows.length>12)toast(`将逐个抓取 ${rows.length} 个编号的立创搜索页,可能需 1-2 分钟,请稍候…`);
+  const btn=$("catOnlineBtn");
+  const oldTxt=btn?btn.textContent:"";
+  let okN=0;
+  for(let i=0;i<rows.length;i++){
+    const r=rows[i];
+    if(btn)btn.textContent=`匹配中 ${i+1}/${rows.length}: ${r.lcsc}`;
+    try{
+      const html=await fetchViaProxy("https://so.szlcsc.com/global.html?k="+encodeURIComponent(r.lcsc),6000);
+      if(html){
+        const cat=extractCatFromSearch(html);
+        if(cat){r.matched=cat;r.status="ok";okN++}
+      }
+    }catch(e){}
+  }
+  if(btn)btn.textContent=oldTxt;
+  renderCatMatch();
+  const left=rows.length-okN;
+  toast(`在线匹配完成:成功 ${okN} 条`+(left?`,失败 ${left} 条(可手动指定类别或稍后重试)`:"")+"","ok");
 }
 function genCatMatchRequest(){
   const lcs=[...new Set((window._catMatch||[]).filter(r=>!r.matched&&r.lcsc).map(r=>r.lcsc))];
