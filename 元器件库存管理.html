@@ -967,6 +967,70 @@ function parseFillCode(s){
   });
   return f;
 }
+function stripTags(s){return String(s==null?"":s).replace(/<[^>]*>/g,"").replace(/&nbsp;/g," ").trim()}
+function extractParamsFromHtml(html){
+  const params=[];
+  const src=String(html||"");
+  let start=src.indexOf("商品参数");
+  if(start<0)start=src.indexOf("属性参数值");
+  if(start<0)return params;
+  const ends=[src.indexOf("商品特性",start),src.indexOf("最新价格",start),src.indexOf("数据手册",start),src.indexOf("商品详情",start),src.length].filter(x=>x>=0);
+  const end=Math.min.apply(null,ends);
+  const seg=src.slice(start,end);
+  const trRe=/<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  let m;
+  while((m=trRe.exec(seg))){
+    const tds=[];
+    const tdRe=/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
+    let tm;
+    while((tm=tdRe.exec(m[1])))tds.push(stripTags(tm[1]));
+    if(tds.length<2)continue;
+    const name=tds.length>=3?tds[1]:tds[0];
+    const value=tds.length>=3?tds[2]:tds[1];
+    if(!name)continue;
+    if(/^(属性|参数|值)$/.test(name)||/^属性参数/.test(name))continue;
+    params.push({name,value});
+  }
+  return params;
+}
+function extractMetaFromHtml(html){
+  const out={title:"",lcsc:"",pkg:"",brand:"",price:0};
+  const src=String(html||"");
+  let t=src.match(/商品型号[^<>\n]{0,80}?([A-Za-z0-9][^<>\n]{1,40})/);
+  if(!t){const h=src.match(/<h1[^>]*>([^<]+)<\/h1>/i);if(h)t=[null,h[1]]}
+  if(!t){const ti=src.match(/<title>([\s\S]*?)<\/title>/i);if(ti)t=[null,ti[1].split("_")[0].split("\n")[0]]}
+  if(t)out.title=stripTags(t[1]).trim();
+  const lc=src.match(/C\d{5,}/);
+  if(lc)out.lcsc=lc[0];
+  const pk=src.match(/商品封装[\s\S]{0,120}?([^<>\n]{1,40})/);
+  if(pk)out.pkg=stripTags(pk[1]).replace(/^[：:\s]+/,"");
+  const br=src.match(/品牌名称[\s\S]{0,120}?([^<>\n]{1,40})/);
+  if(br)out.brand=stripTags(br[1]).replace(/^[：:\s]+/,"");
+  const pr=src.match(/(\d{1,6})\+\s*￥([\d.]+)/);
+  if(pr)out.price=parseFloat(pr[2])||0;
+  return out;
+}
+async function fetchViaProxy(url){
+  const makers=[
+    u=>u,
+    u=>"https://api.allorigins.win/raw?url="+encodeURIComponent(u),
+    u=>"https://corsproxy.io/?url="+encodeURIComponent(u),
+    u=>"https://api.codetabs.com/v1/proxy?quest="+encodeURIComponent(u)
+  ];
+  for(const mk of makers){
+    try{
+      const ctl=typeof AbortController!=="undefined"?new AbortController():null;
+      const tm=ctl?setTimeout(()=>ctl.abort(),9000):null;
+      const r=await fetch(mk(url),ctl?{signal:ctl.signal}:{});
+      if(tm)clearTimeout(tm);
+      if(r.ok){
+        const txt=await r.text();
+        if(txt&&txt.length>1500)return txt;
+      }
+    }catch(e){}
+  }
+  throw new Error("proxy-fail");
+}
 function parseParamsStr(s){
   if(!s)return[];
   return String(s).split(";").map(seg=>{
@@ -1077,11 +1141,52 @@ async function matchLcscProduct(){
   else if(mPid){productId=mPid[1]}
   else{const mid=s.match(/(\d{4,})/);if(mid)productId=mid[1]}
   if(!lcscNum&&!productId){toast("未能识别 LCSC 编号或商品 ID,请检查链接格式","err");return}
+  /* 本地直连解析:通过 CORS 代理抓取详情页并解析商品参数,不经过 AI */
+  if(productId){
+    toast("正在本地抓取并解析立创商品信息…");
+    try{
+      const html=await fetchViaProxy("https://item.szlcsc.com/"+productId+".html");
+      const params=extractParamsFromHtml(html);
+      const meta=extractMetaFromHtml(html);
+      const f={};
+      if(meta.title)f.mpn=meta.title;
+      f.lcsc=lcscNum||meta.lcsc||"";
+      if(f.lcsc)$("eLcsc").value=f.lcsc;
+      if(meta.pkg)f.pkg=meta.pkg;
+      if(meta.brand)f.note=(f.note?f.note+" ":"")+meta.brand;
+      if(meta.price)f.price=meta.price;
+      if(params.length){
+        const vals=params.map(p=>p.value).filter(Boolean);
+        if(!f.val&&vals.length)f.val=vals.slice(0,3).join(" ");
+      }
+      if(f.mpn)$("eMpn").value=f.mpn;
+      if(f.pkg)$("ePkg").value=f.pkg;
+      if(f.price)$("ePrice").value=f.price;
+      if(f.note)$("eNote").value=f.note;
+      if(f.val)$("eVal").value=f.val;
+      if(params.length)renderParamsMatch(params);
+      toast(params.length?"已本地解析并自动填充商品参数(绿=有数据/红=无数据),请核对后保存":"已解析到商品信息但未识别到参数表,请核对字段","ok");
+      return;
+    }catch(e){
+      toast("本地抓取失败(网络或代理不可用),可发送链接由 AI 完成匹配","err");
+      return;
+    }
+  }
+  /* 仅 LCSC 编号:先尝试搜索页本地解析,失败则提交请求 */
+  toast("正在本地解析…");
+  try{
+    const html=await fetchViaProxy("https://so.szlcsc.com/global.html?k="+encodeURIComponent(lcscNum));
+    const meta=extractMetaFromHtml(html);
+    const f={lcsc:lcscNum};
+    if(meta.title)f.mpn=meta.title;
+    if(meta.pkg)f.pkg=meta.pkg;
+    if(meta.price)f.price=meta.price;
+    if(f.mpn||f.pkg||f.price){applyMatch(f);toast("已本地解析商品信息(搜索页数据有限),请补充参数","ok");return}
+  }catch(e){}
   const req={ts:Date.now(),lcsc:lcscNum,pid:productId,from:"browser"};
   try{localStorage.setItem("lcsc-match-request",JSON.stringify(req))}catch(e){}
   if(FS.mode==="file")FS.writeFile("pending-match.json",JSON.stringify(req));
-  const key=lcscNum||("商品ID "+productId);
-  toast("已提交自动匹配请求:"+key+"\n请回到 WorkBuddy 对话发送该链接(或说「已提交匹配」),AI 匹配完成后自动填充表单","ok");
+  toast("本地解析未获取到数据,已提交匹配请求:LCSC "+lcscNum+"\n可发送链接由 AI 匹配,或粘贴 item.szlcsc.com 详情页链接本地解析","warn");
 }
 function openBatchPrice(){
   if(!selSet.size){toast("请先勾选要查价的器件","warn");return}
