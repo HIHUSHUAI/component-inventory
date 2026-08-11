@@ -432,7 +432,8 @@ tbody tr.sel-row{background:rgba(88,166,255,.08)}
     <div class="cat-src">
       <button class="btn" onclick="catFromLocal()" title="从库存中已有同编号器件的类别学习匹配(离线立即生效)">从已有库存匹配</button>
       <button class="btn accent" id="catOnlineBtn" onclick="catMatchOnline()" title="逐个抓取立创搜索页(so.szlcsc.com/global.html?k=编号),按商品卡片类别位置提取">在线匹配</button>
-      <button class="btn" onclick="pasteCatMatch()" title="粘贴匹配结果码(CATMATCH|编号=类别;…,备用)">粘贴结果(备用)</button>
+      <button class="btn" onclick="genCatMatchRequest()" title="在线失败时:生成待匹配编号清单并复制,发送到对话获取结果码后粘贴">复制请求(发助手)</button>
+      <button class="btn" onclick="pasteCatMatch()" title="粘贴匹配结果码(CATMATCH|编号=类别;…,备用)">粘贴结果</button>
     </div>
     <textarea id="catReqBox" style="display:none;width:100%;box-sizing:border-box;margin-top:8px;background:var(--panel2);border:1px solid var(--border2);border-radius:8px;color:var(--text);padding:8px 10px;font-size:12px;font-family:ui-monospace,monospace" readonly rows="3"></textarea>
     <div id="catStat" style="font-size:13px;color:var(--muted);margin:10px 0 6px"></div>
@@ -1636,7 +1637,8 @@ async function catMatchOnline(){
   if(btn)btn.textContent=oldTxt;
   renderCatMatch();
   const left=rows.length-okN;
-  toast(`在线匹配完成:成功 ${okN} 条`+(failNet?`,${failNet} 条网络/代理失败`:"")+(failParse?`,${failParse} 条页面未识别到类别`:"")+(left?`;剩余可手动指定类别(输入框可直接新建)或重试`:"")+"","ok");
+  if(!left)toast(`在线匹配完成:成功 ${okN} 条`,"ok");
+  else toast(`在线匹配:成功 ${okN} 条,${left} 条未匹配(网络/未识别)。可点「复制请求(发助手)」发送编号,返回结果后「粘贴结果」即可`,"warn");
 }
 function genCatMatchRequest(){
   const lcs=[...new Set((window._catMatch||[]).filter(r=>!r.matched&&r.lcsc).map(r=>r.lcsc))];
@@ -1681,11 +1683,12 @@ function renderCatMatch(){
   $("catBody").innerHTML=rows.map(r=>{
     const ok=r.status==="ok";
     const selCls=ok?"sel-ok":(r.cur?"sel-miss":"");
+    const isNewCat=!!r.matched&&!CATS.includes(r.matched);
     return `<tr>
       <td><input type="checkbox" class="cat-ck" id="catck_${r.id}" ${ok?"checked":""} onchange="catRowCheck('${r.id}')"></td>
       <td><span class="mpn">${esc(r.mpn)}</span>${r.lcsc?`<div style="font-family:ui-monospace,monospace;font-size:11px;color:var(--muted)">${esc(r.lcsc)} <a style="cursor:pointer;color:var(--accent)" onclick="openLcsc('${r.id}')">打开立创</a></div>`:""}</td>
       <td style="color:var(--muted)">${esc(r.cur||"—")}</td>
-      <td><input id="catsel_${r.id}" class="cat-sel ${selCls}" list="catMatchList" value="${esc(r.matched||"")}" placeholder="选择或输入类别(可新建)…" oninput="catRowInput('${r.id}',this.value)" onchange="catRowSel('${r.id}',this.value)"></td>
+      <td><input id="catsel_${r.id}" class="cat-sel ${selCls}" list="catMatchList" value="${esc(r.matched||"")}" placeholder="选择或输入类别(可新建)…" oninput="catRowInput('${r.id}',this.value)" onchange="catRowSel('${r.id}',this.value)">${isNewCat?`<div style="font-size:10px;color:var(--accent);margin-top:2px">新类别,保存后自动加入类别库</div>`:""}</td>
       <td id="catbdg_${r.id}">${ok?'<span class="badge green">已匹配</span>':'<span class="badge red">待补充</span>'}</td>
     </tr>`;
   }).join("")||'<tr><td colspan="5"><div class="empty">没有可匹配的器件</div></td></tr>';
@@ -1952,7 +1955,7 @@ async function runAutoCatAfterImport(ids){
     }catch(e){}
   }
   if(n){save();render();toast(`已自动匹配类别:${n} 件(可撤销)`,"ok")}
-  else toast("自动匹配类别未成功(网络受限或未识别到类别),可在「批量匹配类别」中重试或手动填写","warn");
+  else toast("自动匹配类别未成功(网络受限或未识别到类别)。可到「批量匹配类别」点「复制请求(发助手)」发送编号,返回结果后粘贴生效","warn");
 }
 function exportCSV(viewOnly){
   const list=viewOnly?filtered():items;
